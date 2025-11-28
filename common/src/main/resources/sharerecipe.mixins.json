@@ -1,0 +1,16 @@
+{
+  "required": true,
+  "package": "net.creeperhost.sharerecipe.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "minVersion": "0.8",
+  "client": [
+    "ScreenMixin"
+  ],
+  "mixins": [
+    "GuiIconToggleButtonMixin",
+    "RecipeGuiLayoutsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
