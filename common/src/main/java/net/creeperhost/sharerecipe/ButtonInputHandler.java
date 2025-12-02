@@ -12,8 +12,10 @@ import java.util.Optional;
 public record ButtonInputHandler(Button button) implements IUserInputHandler {
     @Override
     public @NotNull Optional<IUserInputHandler> handleUserInput(Screen screen, UserInput input, IInternalKeyMappings keyBindings) {
-        System.out.println("MOO");
-        boolean b = button.mouseClicked(input.getMouseX(), input.getMouseX(), input.getModifiers());
-        return b ? Optional.of(this) : Optional.empty();
+        boolean b = button.mouseClicked(input.getMouseX(), input.getMouseY(), input.getModifiers());
+        if (b && button instanceof IconButton) {
+            return Optional.of(this);
+        }
+        return Optional.empty();
     }
 }

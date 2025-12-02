@@ -1,18 +1,28 @@
 package net.creeperhost.sharerecipe.mixin;
 
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
+import mezz.jei.api.gui.ingredient.IRecipeSlotView;
+import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
+import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
+import mezz.jei.api.recipe.RecipeIngredientRole;
+import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.util.ImmutableRect2i;
+import mezz.jei.gui.input.IClickableIngredientInternal;
 import mezz.jei.gui.input.IUserInputHandler;
 import mezz.jei.gui.input.handlers.CombinedInputHandler;
 import mezz.jei.gui.input.handlers.ProxyInputHandler;
 import mezz.jei.gui.recipes.RecipeGuiLayouts;
 import mezz.jei.gui.recipes.RecipeLayoutWithButtons;
 import net.creeperhost.sharerecipe.ButtonInputHandler;
+import net.creeperhost.sharerecipe.RecipeData;
 import net.creeperhost.sharerecipe.ShareRecipe;
 import net.creeperhost.sharerecipe.IconButton;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -28,7 +38,7 @@ import java.util.List;
 import java.util.Optional;
 
 @Mixin(RecipeGuiLayouts.class)
-public class RecipeGuiLayoutsMixin {
+public abstract class RecipeGuiLayoutsMixin {
 
     @Final
     @Shadow(remap = false)
@@ -56,8 +66,45 @@ public class RecipeGuiLayoutsMixin {
             int x = immutableRect2i.getX();
             int y = immutableRect2i.getY() - height - 2;
             if (!sharerecipe$ourButtons.containsKey(recipeLayoutsWithButton)) {
-                sharerecipe$ourButtons.put(recipeLayoutsWithButton, new IconButton(x, y, width, height, Component.literal(""), e -> System.out.println("meow"))
-                        .setIcon(ResourceLocation.fromNamespaceAndPath(ShareRecipe.MOD_ID, "textures/gui/other_cat_icon.png"), 8, 8));
+                sharerecipe$ourButtons.put(recipeLayoutsWithButton, new IconButton(x, y, width, height, Component.literal(""), e -> {
+                    try {
+                        IRecipeCategory<?> recipeCategory = recipeLayoutsWithButton.recipeLayout().getRecipeCategory();
+                        String cat = recipeCategory.getTitle().getString();
+                        IRecipeSlotsView recipeSlotsView = recipeLayoutsWithButton.recipeLayout().getRecipeSlotsView();
+                        List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
+                        List<IRecipeSlotView> outputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.OUTPUT);
+
+                        int i = 0;
+                        List<String> inputs =  new ArrayList<>();
+                        for (IRecipeSlotView inputSlot : inputSlots) {
+                            Optional<ItemStack> stack = inputSlot.getDisplayedItemStack();
+                                if (stack.isPresent()) {
+                                    //TODO this should iterate all items this could use from tags
+                                    ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.get().getItem());
+                                    inputs.add(rs.toString());
+//                                    System.out.println("INPUT: " + i + " " + stack.get());
+                                }
+                            i++;
+                        }
+
+                        List<String> outputs = new ArrayList<>();
+                        for (IRecipeSlotView outputSlot : outputSlots) {
+                            Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
+                            if (stack.isPresent()) {
+                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.get().getItem());
+                                outputs.add(rs.toString());
+//                                System.out.println("OUTPUT: " + stack.get());
+                            }
+                        }
+                        RecipeData recipeData = new RecipeData(cat, inputs, outputs);
+                        System.out.println(recipeData.getRecipe_category());
+                        recipeData.getInputs().forEach(System.out::println);
+                        recipeData.getOutputs().forEach(System.out::println);
+
+                    } catch (Exception ex) {
+//                        ex.printStackTrace();
+                    }
+                }).setIcon(ResourceLocation.fromNamespaceAndPath(ShareRecipe.MOD_ID, "textures/gui/other_cat_icon.png"), 8, 8));
             } else {
                 IconButton iconButton = sharerecipe$ourButtons.get(recipeLayoutsWithButton);
                 iconButton.setX(x);
