@@ -1,28 +1,25 @@
 package net.creeperhost.sharerecipe.mixin;
 
+import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
-import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
+import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.util.ImmutableRect2i;
-import mezz.jei.gui.input.IClickableIngredientInternal;
 import mezz.jei.gui.input.IUserInputHandler;
 import mezz.jei.gui.input.handlers.CombinedInputHandler;
 import mezz.jei.gui.input.handlers.ProxyInputHandler;
 import mezz.jei.gui.recipes.RecipeGuiLayouts;
 import mezz.jei.gui.recipes.RecipeLayoutWithButtons;
-import net.creeperhost.sharerecipe.ButtonInputHandler;
-import net.creeperhost.sharerecipe.RecipeData;
-import net.creeperhost.sharerecipe.ShareRecipe;
-import net.creeperhost.sharerecipe.IconButton;
+import mezz.jei.library.ingredients.TypedIngredient;
+import net.creeperhost.sharerecipe.*;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -75,30 +72,40 @@ public abstract class RecipeGuiLayoutsMixin {
                         List<IRecipeSlotView> outputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.OUTPUT);
 
                         int i = 0;
-                        List<String> inputs =  new ArrayList<>();
+                        List<List<ShareIngredient>> inputs =  new ArrayList<>();
                         for (IRecipeSlotView inputSlot : inputSlots) {
-                            Optional<ItemStack> stack = inputSlot.getDisplayedItemStack();
-                                if (stack.isPresent()) {
-                                    //TODO this should iterate all items this could use from tags
-                                    ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.get().getItem());
-                                    inputs.add(rs.toString());
-//                                    System.out.println("INPUT: " + i + " " + stack.get());
+                            List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
+                            List<ShareIngredient> shareIngredient = new ArrayList<>();
+                            for (ITypedIngredient<?> iTypedIngredient : list) {
+                                if (iTypedIngredient instanceof TypedIngredient<?>) {
+                                    TypedIngredient typedIngredient = (TypedIngredient) iTypedIngredient;
+                                    if (typedIngredient.getType() == VanillaTypes.ITEM_STACK) {
+                                        Optional itemStack = typedIngredient.getItemStack();
+                                        if (itemStack.isPresent()) {
+                                            ItemStack stack = (ItemStack) itemStack.get();
+                                            ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                                            shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
+                                        }
+                                    }
                                 }
+                            }
+                            inputs.add(shareIngredient);
                             i++;
                         }
 
-                        List<String> outputs = new ArrayList<>();
+                        List<ShareIngredient> outputs = new ArrayList<>();
                         for (IRecipeSlotView outputSlot : outputSlots) {
                             Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
                             if (stack.isPresent()) {
-                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.get().getItem());
-                                outputs.add(rs.toString());
+                                ItemStack iStack = stack.get();
+                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
+                                outputs.add(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack"));
 //                                System.out.println("OUTPUT: " + stack.get());
                             }
                         }
                         RecipeData recipeData = new RecipeData(cat, inputs, outputs);
                         System.out.println(recipeData.getRecipe_category());
-                        recipeData.getInputs().forEach(System.out::println);
+                        recipeData.getInputs().forEach(ii -> ii.forEach(System.out::println));
                         recipeData.getOutputs().forEach(System.out::println);
 
                     } catch (Exception ex) {

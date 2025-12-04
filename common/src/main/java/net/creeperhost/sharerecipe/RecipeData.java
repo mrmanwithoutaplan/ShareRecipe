@@ -5,10 +5,10 @@ import java.util.List;
 public class RecipeData
 {
     String recipe_category;
-    List<String> inputs;
-    List<String> outputs;
+    List<List<ShareIngredient>> inputs;
+    List<ShareIngredient> outputs;
 
-    public RecipeData(String recipe_category, List<String> inputs, List<String> outputs) {
+    public RecipeData(String recipe_category, List<List<ShareIngredient>> inputs, List<ShareIngredient> outputs) {
         this.recipe_category = recipe_category;
         this.inputs = inputs;
         this.outputs = outputs;
@@ -18,11 +18,11 @@ public class RecipeData
         return recipe_category;
     }
 
-    public List<String> getInputs() {
+    public List<List<ShareIngredient>> getInputs() {
         return inputs;
     }
 
-    public List<String> getOutputs() {
+    public List<ShareIngredient> getOutputs() {
         return outputs;
     }
 }
