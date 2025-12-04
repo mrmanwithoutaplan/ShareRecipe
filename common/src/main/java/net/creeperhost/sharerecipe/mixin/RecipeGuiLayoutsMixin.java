@@ -2,20 +2,24 @@ package net.creeperhost.sharerecipe.mixin;
 
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
+import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
+import mezz.jei.common.gui.elements.DrawableResource;
 import mezz.jei.common.util.ImmutableRect2i;
 import mezz.jei.gui.input.IUserInputHandler;
 import mezz.jei.gui.input.handlers.CombinedInputHandler;
 import mezz.jei.gui.input.handlers.ProxyInputHandler;
 import mezz.jei.gui.recipes.RecipeGuiLayouts;
 import mezz.jei.gui.recipes.RecipeLayoutWithButtons;
+import mezz.jei.library.gui.ingredients.RecipeSlot;
 import mezz.jei.library.ingredients.TypedIngredient;
 import net.creeperhost.sharerecipe.*;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -65,47 +69,63 @@ public abstract class RecipeGuiLayoutsMixin {
             if (!sharerecipe$ourButtons.containsKey(recipeLayoutsWithButton)) {
                 sharerecipe$ourButtons.put(recipeLayoutsWithButton, new IconButton(x, y, width, height, Component.literal(""), e -> {
                     try {
-                        IRecipeCategory<?> recipeCategory = recipeLayoutsWithButton.recipeLayout().getRecipeCategory();
+                        IRecipeLayoutDrawable<?> recipeLayout = recipeLayoutsWithButton.recipeLayout();
+                        IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
+                        IDrawable background = recipeCategory.getBackground();
+                        Background ourBackground = null;
+                        if (background instanceof DrawableResource) {
+                            DrawableResourceAccessor resourceDrawable = (DrawableResourceAccessor) background;
+                            ourBackground = new Background(resourceDrawable.sharerecipe$getResourceLocation(), resourceDrawable.sharerecipe$getWidth(), resourceDrawable.sharerecipe$getHeight(), resourceDrawable.sharerecipe$getU(), resourceDrawable.sharerecipe$getV(), resourceDrawable.sharerecipe$getWidth(), resourceDrawable.sharerecipe$getHeight());
+                        }
                         String cat = recipeCategory.getTitle().getString();
-                        IRecipeSlotsView recipeSlotsView = recipeLayoutsWithButton.recipeLayout().getRecipeSlotsView();
+                        IRecipeSlotsView recipeSlotsView = recipeLayout.getRecipeSlotsView();
                         List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
                         List<IRecipeSlotView> outputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.OUTPUT);
 
                         int i = 0;
-                        List<List<ShareIngredient>> inputs =  new ArrayList<>();
+                        List<ShareSlot> inputs =  new ArrayList<>();
                         for (IRecipeSlotView inputSlot : inputSlots) {
-                            List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
-                            List<ShareIngredient> shareIngredient = new ArrayList<>();
-                            for (ITypedIngredient<?> iTypedIngredient : list) {
-                                if (iTypedIngredient instanceof TypedIngredient<?>) {
-                                    TypedIngredient typedIngredient = (TypedIngredient) iTypedIngredient;
-                                    if (typedIngredient.getType() == VanillaTypes.ITEM_STACK) {
-                                        Optional itemStack = typedIngredient.getItemStack();
-                                        if (itemStack.isPresent()) {
-                                            ItemStack stack = (ItemStack) itemStack.get();
-                                            ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                                            shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
+                            if (inputSlot instanceof RecipeSlot) {
+                                RecipeSlot recipeSlot = (RecipeSlot)inputSlot;
+                                Rect2i rect = recipeSlot.getRect();
+                                List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
+                                List<ShareIngredient> shareIngredient = new ArrayList<>();
+                                for (ITypedIngredient<?> iTypedIngredient : list) {
+                                    if (iTypedIngredient instanceof TypedIngredient<?>) {
+                                        TypedIngredient typedIngredient = (TypedIngredient) iTypedIngredient;
+                                        if (typedIngredient.getType() == VanillaTypes.ITEM_STACK) {
+                                            Optional itemStack = typedIngredient.getItemStack();
+                                            if (itemStack.isPresent()) {
+                                                ItemStack stack = (ItemStack) itemStack.get();
+                                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
+                                            }
                                         }
                                     }
                                 }
+                                inputs.add(new ShareSlot(i, rect, shareIngredient));
                             }
-                            inputs.add(shareIngredient);
                             i++;
                         }
 
-                        List<ShareIngredient> outputs = new ArrayList<>();
+                        int outputSlotNum = 0;
+                        List<ShareSlot> outputs = new ArrayList<>();
                         for (IRecipeSlotView outputSlot : outputSlots) {
-                            Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
-                            if (stack.isPresent()) {
-                                ItemStack iStack = stack.get();
-                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
-                                outputs.add(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack"));
-//                                System.out.println("OUTPUT: " + stack.get());
+                            if (outputSlot instanceof RecipeSlot) {
+                                Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
+                                Rect2i rect = ((RecipeSlot) outputSlot).getRect();
+                                if (stack.isPresent()) {
+                                    ItemStack iStack = stack.get();
+                                    ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
+                                    outputs.add(new ShareSlot(outputSlotNum, rect, List.of(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack"))));
+    //                                System.out.println("OUTPUT: " + stack.get());
+                                }
                             }
+                            outputSlotNum++;
                         }
-                        RecipeData recipeData = new RecipeData(cat, inputs, outputs);
+                        RecipeData recipeData = new RecipeData(cat, inputs, outputs, ourBackground);
                         System.out.println(recipeData.getRecipe_category());
-                        recipeData.getInputs().forEach(ii -> ii.forEach(System.out::println));
+                        recipeData.getInputs().forEach(System.out::println);
                         recipeData.getOutputs().forEach(System.out::println);
 
                     } catch (Exception ex) {

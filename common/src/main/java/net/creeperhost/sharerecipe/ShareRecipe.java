@@ -1,6 +1,7 @@
 package net.creeperhost.sharerecipe;
 
 import dev.architectury.event.events.client.ClientGuiEvent;
+import net.creeperhost.polylib.development.DevelopmentTools;
 import net.creeperhost.sharerecipe.mixin.ScreenMixin;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.Button;
@@ -14,6 +15,7 @@ public final class ShareRecipe {
     public static final String MOD_ID = "sharerecipe";
 
     public static void init() {
+        DevelopmentTools.initClient();
 
         ClientGuiEvent.INIT_POST.register((screen, access) ->
         {
