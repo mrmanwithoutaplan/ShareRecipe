@@ -1,5 +1,6 @@
 package net.creeperhost.sharerecipe.mixin;
 
+import com.google.gson.Gson;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.drawable.IDrawable;
@@ -18,12 +19,18 @@ import mezz.jei.gui.recipes.RecipeLayoutWithButtons;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
 import mezz.jei.library.ingredients.TypedIngredient;
 import net.creeperhost.sharerecipe.*;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.components.ChatComponent;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import org.apache.commons.io.IOUtils;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -33,10 +40,18 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URI;
+import java.net.URL;
+import java.net.URLConnection;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Mixin(RecipeGuiLayouts.class)
 public abstract class RecipeGuiLayoutsMixin {
@@ -124,9 +139,40 @@ public abstract class RecipeGuiLayoutsMixin {
                             outputSlotNum++;
                         }
                         RecipeData recipeData = new RecipeData(cat, inputs, outputs, ourBackground);
-                        System.out.println(recipeData.getRecipe_category());
-                        recipeData.getInputs().forEach(System.out::println);
-                        recipeData.getOutputs().forEach(System.out::println);
+
+                        CompletableFuture.runAsync(() -> {
+                            try {
+                                Gson gson = new Gson();
+                                String json = gson.toJson(recipeData);
+                                URL url = new URI("http://localhost:5000/recipe").toURL();
+                                HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+                                urlConnection.setRequestMethod("PUT");
+                                urlConnection.setDoOutput(true);
+                                urlConnection.setRequestProperty("Content-Type", "application/json");
+                                OutputStream outputStream = urlConnection.getOutputStream();
+                                byte[] bytes = json.getBytes(StandardCharsets.UTF_8);
+                                outputStream.write(bytes);
+                                if (urlConnection.getResponseCode() == 200) {
+                                    InputStream inputStream = urlConnection.getInputStream();
+                                    String body = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
+                                    ShareResult shareResult = gson.fromJson(body, ShareResult.class);
+                                    if (Minecraft.getInstance() != null && Minecraft.getInstance().player != null) {
+                                        MutableComponent link = Component.literal(shareResult.url);
+                                        link.setStyle(link.getStyle().applyFormat(ChatFormatting.BLUE).applyFormat(ChatFormatting.UNDERLINE).withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, shareResult.url)));
+                                        Component finished = Component.literal("[ShareRecipe] Your content is now available on ShareRecipe! ").append(link);
+                                        Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
+
+                                    }
+                                } else {
+                                    if (Minecraft.getInstance() != null && Minecraft.getInstance().player != null) {
+                                        Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
+                                        Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
+                                    }
+                                }
+
+                                urlConnection.disconnect();
+                            } catch (Exception e2) {}
+                        });
 
                     } catch (Exception ex) {
 //                        ex.printStackTrace();
