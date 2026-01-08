@@ -20,6 +20,9 @@
     ],
     "client": [
       "net.creeperhost.sharerecipe.fabric.client.ShareRecipeFabricClient"
+    ],
+    "jei_mod_plugin": [
+      "net.creeperhost.sharerecipe.ShareJeiPlugin"
     ]
   },
   "mixins": [

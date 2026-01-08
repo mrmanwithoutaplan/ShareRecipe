@@ -4,12 +4,9 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "client": [
-    "ScreenMixin"
   ],
   "mixins": [
-    "DrawableResourceAccessor",
-    "GuiIconToggleButtonMixin",
-    "RecipeGuiLayoutsMixin"
+    "DrawableResourceAccessor"
   ],
   "injectors": {
     "defaultRequire": 1
