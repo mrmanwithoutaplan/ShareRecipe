@@ -1,6 +1,10 @@
 package net.creeperhost.sharerecipe;
 
 import com.google.gson.Gson;
+import com.mojang.blaze3d.pipeline.RenderTarget;
+import com.mojang.blaze3d.pipeline.TextureTarget;
+import com.mojang.blaze3d.platform.NativeImage;
+import com.mojang.blaze3d.systems.RenderSystem;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -15,19 +19,22 @@ import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.gui.elements.DrawableResource;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
-import mezz.jei.library.ingredients.TypedIngredient;
 import net.creeperhost.sharerecipe.mixin.DrawableResourceAccessor;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.apache.commons.io.IOUtils;
 
+import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -47,6 +54,41 @@ public class ShareButtonController implements IIconButtonController {
         this.layoutDrawable = layoutDrawable;
     }
 
+    public <T extends Object> void renderBackground(IRecipeLayoutDrawable<T> drawable) {
+        RenderTarget framebuffer = new TextureTarget(2000, 2000, true, Minecraft.ON_OSX);
+        framebuffer.setClearColor(0.5f, 0.5f, 0.5f, 0.5f);
+        T recipe = drawable.getRecipe();
+        IRecipeCategory<T> recipeCategory = drawable.getRecipeCategory();
+
+        RenderSystem.recordRenderCall(() -> {
+            framebuffer.clear(Minecraft.ON_OSX);
+            framebuffer.bindWrite(true);
+
+            RenderSystem.viewport(0, 0, 2000, 2000);
+
+            GuiGraphics guiGraphics = new GuiGraphics(Minecraft.getInstance(), Minecraft.getInstance().renderBuffers().bufferSource());
+
+            //recipeCategory.draw(recipe, drawable.getRecipeSlotsView(), guiGraphics, 0, 0);
+            guiGraphics.renderFakeItem(Items.GRASS_BLOCK.getDefaultInstance(), 1000 - 8, 1000 - 8);
+
+            guiGraphics.flush();
+
+            NativeImage image = new NativeImage(2000, 2000, false);
+            RenderSystem.bindTexture(framebuffer.getColorTextureId());
+            image.downloadTexture(0, false);
+
+            try {
+                image.writeToFile(new File("output.png"));
+            } catch (Exception e) {
+                e.printStackTrace();
+            } finally {
+                image.close();
+                framebuffer.destroyBuffers();
+                Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
+            }
+        });
+    }
+
     @Override
     public boolean onPress(IJeiUserInput input) {
         if (input.isSimulate()) return true;
@@ -54,6 +96,9 @@ public class ShareButtonController implements IIconButtonController {
             IRecipeLayoutDrawable<?> recipeLayout = this.layoutDrawable;
             IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
             IDrawable background = recipeCategory.getBackground();
+
+            renderBackground(recipeLayout);
+
             Background ourBackground = null;
             if (background instanceof DrawableResource) {
                 DrawableResourceAccessor resourceDrawable = (DrawableResourceAccessor) background;
@@ -126,7 +171,7 @@ public class ShareButtonController implements IIconButtonController {
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
                     } else {
-                        if (Minecraft.getInstance() != null && Minecraft.getInstance().player != null) {
+                        if (Minecraft.getInstance().player != null) {
                             Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
