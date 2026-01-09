@@ -38,6 +38,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Stream;
 
 public class ShareButtonController implements IIconButtonController {
     private final IRecipeLayoutDrawable layoutDrawable;
@@ -66,15 +67,20 @@ public class ShareButtonController implements IIconButtonController {
             int i = 0;
             List<ShareSlot> inputs =  new ArrayList<>();
             for (IRecipeSlotView inputSlot : inputSlots) {
-                if (inputSlot instanceof RecipeSlot) {
-                    RecipeSlot recipeSlot = (RecipeSlot)inputSlot;
+                if (inputSlot instanceof RecipeSlot recipeSlot) {
                     Rect2i rect = recipeSlot.getRect();
                     List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
                     List<ShareIngredient> shareIngredient = new ArrayList<>();
-                    list.stream().filter(iTypedIngredient -> iTypedIngredient instanceof TypedIngredient<?>).map(iTypedIngredient -> (TypedIngredient) iTypedIngredient).filter(typedIngredient -> typedIngredient.getType() == VanillaTypes.ITEM_STACK).<Optional>map(typedIngredient -> typedIngredient.getItemStack()).filter(itemStack -> itemStack.isPresent()).map(itemStack -> (ItemStack) itemStack.get()).forEach(stack -> {
-                        ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                        shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
-                    });
+                    list.stream()
+                        .filter(iTypedIngredient -> iTypedIngredient.getType() == VanillaTypes.ITEM_STACK)
+                        .map(ITypedIngredient::getItemStack)
+                        .filter(Optional::isPresent)
+                        .map(Optional::get)
+                        .forEach(stack -> {
+                            ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                            shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
+                        }
+                    );
                     inputs.add(new ShareSlot(i, rect, shareIngredient));
                 }
                 i++;
