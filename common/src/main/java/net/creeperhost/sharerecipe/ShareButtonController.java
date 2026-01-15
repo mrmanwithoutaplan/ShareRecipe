@@ -116,24 +116,17 @@ public class ShareButtonController<T> implements IIconButtonController {
 
     public void renderBackground() {
         IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
-        T recipe = drawable.getRecipe();
-        IRecipeCategory<T> recipeCategory = drawable.getRecipeCategory();
 
-        Minecraft client = Minecraft.getInstance();
 
         Rect2i rect = drawable.getRect();
 
-        int scale = 8;
+        int scale = 4;
         int logicalWidth = rect.getWidth();
         int logicalHeight = rect.getHeight();
 
-        // 2. The actual buffer is much larger
         int bufferWidth = logicalWidth * scale;
         int bufferHeight = logicalHeight * scale;
 
-        IDrawable background = recipeCategory.getBackground();
-
-        // 1. Create the buffer
         RenderTarget framebuffer = new TextureTarget(bufferWidth, bufferHeight, true, Minecraft.ON_OSX);
         framebuffer.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
