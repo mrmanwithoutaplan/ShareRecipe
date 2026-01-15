@@ -47,57 +47,109 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Stream;
 
-public class ShareButtonController implements IIconButtonController {
-    private final IRecipeLayoutDrawable layoutDrawable;
+public class ShareButtonController<T> implements IIconButtonController {
+    private final IRecipeLayoutDrawable<T> layoutDrawable;
 
-    public ShareButtonController(IRecipeLayoutDrawable layoutDrawable) {
+    public ShareButtonController(IRecipeLayoutDrawable<T> layoutDrawable) {
         this.layoutDrawable = layoutDrawable;
     }
 
-    public <T extends Object> void renderBackground(IRecipeLayoutDrawable<T> drawable) {
-        RenderTarget framebuffer = new TextureTarget(2000, 2000, true, Minecraft.ON_OSX);
-        framebuffer.setClearColor(0.5f, 0.5f, 0.5f, 0.5f);
+    public void actualRenderCall(RenderTarget framebuffer, int bufferWidth, int bufferHeight, float scale, Rect2i rect) {
+        Minecraft client = Minecraft.getInstance();
+        framebuffer.clear(Minecraft.ON_OSX);
+        framebuffer.bindWrite(true);
+
+        RenderSystem.viewport(0, 0, bufferWidth, bufferHeight);
+        RenderSystem.disableScissor();
+        RenderSystem.enableDepthTest();
+
+        org.joml.Matrix4f projectionMatrix = new org.joml.Matrix4f()
+                .setOrtho(0.0F, (float)bufferWidth, (float)bufferHeight, 0.0F, -1000.0F, 1000.0F);
+        RenderSystem.setProjectionMatrix(projectionMatrix, com.mojang.blaze3d.vertex.VertexSorting.ORTHOGRAPHIC_Z);
+
+        //            com.mojang.blaze3d.vertex.ByteBufferBuilder byteBuffer = new com.mojang.blaze3d.vertex.ByteBufferBuilder(2048);
+        //            net.minecraft.client.renderer.MultiBufferSource.BufferSource bufferSource =
+        //                    net.minecraft.client.renderer.MultiBufferSource.immediate(byteBuffer);
+
+        NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
+        int x = rect.getX();
+        int y = rect.getY();
+
+        this.layoutDrawable.setPosition(0, 0);
+
+
+        guiGraphics.pose().pushPose();
+        guiGraphics.pose().scale(scale, scale, 1.0f);
+
+        ShareRecipe.fakeZero.set(true);
+        this.layoutDrawable.drawRecipe(guiGraphics, 0, 0);
+        ShareRecipe.fakeZero.set(false);
+
+        this.layoutDrawable.setPosition(x, y);
+
+        //            if (background != null) {
+        //                background.draw(guiGraphics);
+        //            }
+        //            recipeCategory.draw(recipe, drawable.getRecipeSlotsView(), guiGraphics, 0, 0);
+
+        guiGraphics.flush();
+        //            bufferSource.endBatch(); // Forces the draw to the Framebuffer
+        guiGraphics.pose().popPose();
+
+        NativeImage image = new NativeImage(bufferWidth, bufferHeight, false);
+        RenderSystem.bindTexture(framebuffer.getColorTextureId());
+        image.downloadTexture(0, false);
+        image.flipY();
+
+        try {
+            image.writeToFile(new File(client.gameDirectory, "render_debug.png"));
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            image.close();
+            //                byteBuffer.close(); // Important: Frees the memory
+            framebuffer.destroyBuffers();
+            client.getMainRenderTarget().bindWrite(true);
+            client.resizeDisplay();
+        }
+    }
+
+    public void renderBackground() {
+        IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
         T recipe = drawable.getRecipe();
         IRecipeCategory<T> recipeCategory = drawable.getRecipeCategory();
 
-        RenderSystem.recordRenderCall(() -> {
-            framebuffer.clear(Minecraft.ON_OSX);
-            framebuffer.bindWrite(true);
+        Minecraft client = Minecraft.getInstance();
 
-            RenderSystem.viewport(0, 0, 2000, 2000);
+        Rect2i rect = drawable.getRect();
 
-            GuiGraphics guiGraphics = new GuiGraphics(Minecraft.getInstance(), Minecraft.getInstance().renderBuffers().bufferSource());
+        int scale = 8;
+        int logicalWidth = rect.getWidth();
+        int logicalHeight = rect.getHeight();
 
-            //recipeCategory.draw(recipe, drawable.getRecipeSlotsView(), guiGraphics, 0, 0);
-            guiGraphics.renderFakeItem(Items.GRASS_BLOCK.getDefaultInstance(), 1000 - 8, 1000 - 8);
+        // 2. The actual buffer is much larger
+        int bufferWidth = logicalWidth * scale;
+        int bufferHeight = logicalHeight * scale;
 
-            guiGraphics.flush();
+        IDrawable background = recipeCategory.getBackground();
 
-            NativeImage image = new NativeImage(2000, 2000, false);
-            RenderSystem.bindTexture(framebuffer.getColorTextureId());
-            image.downloadTexture(0, false);
+        // 1. Create the buffer
+        RenderTarget framebuffer = new TextureTarget(bufferWidth, bufferHeight, true, Minecraft.ON_OSX);
+        framebuffer.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-            try {
-                image.writeToFile(new File("output.png"));
-            } catch (Exception e) {
-                e.printStackTrace();
-            } finally {
-                image.close();
-                framebuffer.destroyBuffers();
-                Minecraft.getInstance().getMainRenderTarget().bindWrite(true);
-            }
-        });
+        this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect);
     }
 
     @Override
     public boolean onPress(IJeiUserInput input) {
         if (input.isSimulate()) return true;
         try {
+
             IRecipeLayoutDrawable<?> recipeLayout = this.layoutDrawable;
             IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
             IDrawable background = recipeCategory.getBackground();
 
-            renderBackground(recipeLayout);
+            renderBackground();
 
             Background ourBackground = null;
             if (background instanceof DrawableResource) {

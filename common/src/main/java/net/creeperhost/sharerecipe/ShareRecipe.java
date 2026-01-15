@@ -9,9 +9,11 @@ import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ShareRecipe {
     public static final String MOD_ID = "sharerecipe";
+    public static AtomicBoolean fakeZero = new AtomicBoolean(false);
 
     public static void init() {
         DevelopmentTools.initClient();

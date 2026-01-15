@@ -1,4 +1,4 @@
-package net.creeperhost.sharerecipe;
+      package net.creeperhost.sharerecipe;
 
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
