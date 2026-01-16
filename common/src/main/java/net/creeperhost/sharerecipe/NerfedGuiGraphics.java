@@ -9,16 +9,16 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class NerfedGuiGraphics extends GuiGraphics {
     public record StyleChange(Style style, int start) {}
     public record CapturedString(String string, int x, int y, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
-    public int stringCount = 0;
     public List<CapturedString> capturedStrings = new ArrayList<>();
     public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource) {
         super(minecraft, bufferSource);
@@ -26,7 +26,8 @@ public class NerfedGuiGraphics extends GuiGraphics {
 
     @Override
     public int drawString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl) {
-        stringCount++;
+        Vector3f translation = new Vector3f();
+        this.pose().last().pose().getTranslation(translation);
         StringBuilder builder = new StringBuilder();
         AtomicReference<Style> lastStyle = new AtomicReference<>();
         List<StyleChange> styleChanges = new ArrayList<>();
@@ -39,7 +40,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
             builder.append(blah);
             return true;
         });
-        capturedStrings.add(new CapturedString(builder.toString(), i, j, k, bl, styleChanges));
+        capturedStrings.add(new CapturedString(builder.toString(), (int) (translation.x() + i), (int) (translation.y() + j), k, bl, styleChanges));
         return 0;
     }
 
