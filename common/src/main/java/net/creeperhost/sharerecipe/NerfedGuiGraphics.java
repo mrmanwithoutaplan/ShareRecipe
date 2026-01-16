@@ -17,8 +17,9 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class NerfedGuiGraphics extends GuiGraphics {
     public record StyleChange(Style style, int start) {}
+    public record CapturedString(String string, int x, int y, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
     public int stringCount = 0;
-    public HashMap<String, List<StyleChange>> capturedStrings = new HashMap<>();
+    public List<CapturedString> capturedStrings = new ArrayList<>();
     public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource) {
         super(minecraft, bufferSource);
     }
@@ -38,12 +39,13 @@ public class NerfedGuiGraphics extends GuiGraphics {
             builder.append(blah);
             return true;
         });
-        capturedStrings.put(builder.toString(), styleChanges);
+        capturedStrings.add(new CapturedString(builder.toString(), i, j, k, bl, styleChanges));
         return 0;
     }
 
     @Override
     public int drawString(Font font, @Nullable String string, int i, int j, int k, boolean bl) {
+        capturedStrings.add(new CapturedString(string, i, j, k, bl, new ArrayList<>()));
         return 0;
     }
 

@@ -25,16 +25,14 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.data.recipes.RecipeCategory;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 
-import java.io.File;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -45,7 +43,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
-import java.util.stream.Stream;
 
 public class ShareButtonController<T> implements IIconButtonController {
     private final IRecipeLayoutDrawable<T> layoutDrawable;
@@ -54,7 +51,7 @@ public class ShareButtonController<T> implements IIconButtonController {
         this.layoutDrawable = layoutDrawable;
     }
 
-    public void actualRenderCall(RenderTarget framebuffer, int bufferWidth, int bufferHeight, float scale, Rect2i rect) {
+    public byte[] actualRenderCall(RenderTarget framebuffer, int bufferWidth, int bufferHeight, float scale, Rect2i rect, GuiGraphics guiGraphics) {
         Minecraft client = Minecraft.getInstance();
         framebuffer.clear(Minecraft.ON_OSX);
         framebuffer.bindWrite(true);
@@ -71,7 +68,6 @@ public class ShareButtonController<T> implements IIconButtonController {
         //            net.minecraft.client.renderer.MultiBufferSource.BufferSource bufferSource =
         //                    net.minecraft.client.renderer.MultiBufferSource.immediate(byteBuffer);
 
-        NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
         int x = rect.getX();
         int y = rect.getY();
 
@@ -101,20 +97,24 @@ public class ShareButtonController<T> implements IIconButtonController {
         image.downloadTexture(0, false);
         image.flipY();
 
+
         try {
-            image.writeToFile(new File(client.gameDirectory, "render_debug.png"));
+            return image.asByteArray();
+//            image.writeToFile(new File(client.gameDirectory, "render_debug.png"));
         } catch (Exception e) {
             e.printStackTrace();
         } finally {
             image.close();
-            //                byteBuffer.close(); // Important: Frees the memory
             framebuffer.destroyBuffers();
             client.getMainRenderTarget().bindWrite(true);
             client.resizeDisplay();
         }
+        return null;
     }
 
-    public void renderBackground() {
+    public record BackgroundRender(byte[] image, int width, int height, List<NerfedGuiGraphics.CapturedString> strings) {}
+
+    public BackgroundRender renderBackground() {
         IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
 
 
@@ -130,7 +130,11 @@ public class ShareButtonController<T> implements IIconButtonController {
         RenderTarget framebuffer = new TextureTarget(bufferWidth, bufferHeight, true, Minecraft.ON_OSX);
         framebuffer.setClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
-        this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect);
+        Minecraft client = Minecraft.getInstance();
+
+        NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
+
+        return new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings);
     }
 
     @Override
@@ -140,15 +144,12 @@ public class ShareButtonController<T> implements IIconButtonController {
 
             IRecipeLayoutDrawable<?> recipeLayout = this.layoutDrawable;
             IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
-            IDrawable background = recipeCategory.getBackground();
 
-            renderBackground();
+            BackgroundRender backgroundRender = renderBackground();
 
-            Background ourBackground = null;
-            if (background instanceof DrawableResource) {
-                DrawableResourceAccessor resourceDrawable = (DrawableResourceAccessor) background;
-                ourBackground = new Background(resourceDrawable.sharerecipe$getResourceLocation(), resourceDrawable.sharerecipe$getWidth(), resourceDrawable.sharerecipe$getHeight(), resourceDrawable.sharerecipe$getU(), resourceDrawable.sharerecipe$getV(), resourceDrawable.sharerecipe$getWidth(), resourceDrawable.sharerecipe$getHeight());
-            }
+            String backgroundSha = DigestUtils.sha1Hex(backgroundRender.image());
+
+            Background ourBackground = new Background(backgroundSha, backgroundRender.width(), backgroundRender.height(), backgroundRender.strings());
             String cat = recipeCategory.getTitle().getString();
             IRecipeSlotsView recipeSlotsView = recipeLayout.getRecipeSlotsView();
             List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
@@ -195,8 +196,20 @@ public class ShareButtonController<T> implements IIconButtonController {
 
             CompletableFuture.runAsync(() -> {
                 try {
+
+                    boolean b = uploadBackground(backgroundRender.image(), backgroundSha);
+
+                    if (!b) {
+                        if (Minecraft.getInstance().player != null) {
+                            Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
+                            Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
+                        }
+                        return;
+                    }
+
                     Gson gson = new Gson();
                     String json = gson.toJson(recipeData);
+                    System.out.println(json);
                     URL url = new URI("http://localhost:5000/recipe").toURL();
                     HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
                     urlConnection.setRequestMethod("PUT");
@@ -227,9 +240,33 @@ public class ShareButtonController<T> implements IIconButtonController {
             });
 
         } catch (Exception ex) {
-//          ex.printStackTrace();
+          ex.printStackTrace();
         }
         return true;
+    }
+
+    public static boolean uploadBackground(byte[] image, String hash) {
+        try {
+            URL url = new URI("http://localhost:5000/background/" + hash).toURL();
+            HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
+            urlConnection.setRequestMethod("HEAD");
+            if (urlConnection.getResponseCode() == 404) {
+                url = new URI("http://localhost:5000/background").toURL();
+                urlConnection = (HttpURLConnection) url.openConnection();
+                urlConnection.setDoOutput(true);
+                urlConnection.setRequestMethod("PUT");
+                urlConnection.getOutputStream().write(image);
+                if (urlConnection.getResponseCode() == 204) {
+                    return true;
+                }
+                return false;
+            } else {
+                return true;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return false;
     }
 
     @Override

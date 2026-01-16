@@ -1,6 +1,5 @@
 package net.creeperhost.sharerecipe;
 
-import net.minecraft.resources.ResourceLocation;
-
-public record Background(ResourceLocation resourceLocation, int textureWidth, int textureHeight, int u, int v, int width, int height) {
+public record Background(String backgroundIdentifier, int width, int height,
+                         java.util.List<NerfedGuiGraphics.CapturedString> strings) {
 }
