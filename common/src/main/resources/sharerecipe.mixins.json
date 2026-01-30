@@ -4,10 +4,12 @@
   "compatibilityLevel": "JAVA_21",
   "minVersion": "0.8",
   "client": [
-    "TickTimerMixin",
-    "DrawableResourceAccessor"
+    "DrawableResourceAccessor",
+    "TickTimerMixin"
   ],
   "mixins": [
+    "RecipeLayoutAccessor",
+    "ScrollGridRecipeWidgetAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

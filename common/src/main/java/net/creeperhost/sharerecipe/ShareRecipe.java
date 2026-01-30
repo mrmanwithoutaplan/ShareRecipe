@@ -8,7 +8,7 @@ import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.minecraft.client.gui.screens.TitleScreen;
 import net.minecraft.network.chat.Component;
 
-import java.util.List;
+import java.util.List; 
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public final class ShareRecipe {
@@ -17,6 +17,7 @@ public final class ShareRecipe {
 
     public static void init() {
         DevelopmentTools.initClient();
+        ModPackInfo.init();
 
 //        ClientGuiEvent.INIT_POST.register((screen, access) ->
 //        {

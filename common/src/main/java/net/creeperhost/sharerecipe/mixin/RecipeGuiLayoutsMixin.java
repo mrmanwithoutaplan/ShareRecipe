@@ -123,7 +123,7 @@
 //                            i++;
 //                        }
 //
-//                        int outputSlotNum = 0;
+//                        int outputSlotNum = 0     ;
 //                        List<ShareSlot> outputs = new ArrayList<>();
 //                        for (IRecipeSlotView outputSlot : outputSlots) {
 //                            if (outputSlot instanceof RecipeSlot) {

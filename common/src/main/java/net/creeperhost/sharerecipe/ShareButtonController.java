@@ -11,15 +11,21 @@ import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.buttons.IButtonState;
 import mezz.jei.api.gui.buttons.IIconButtonController;
 import mezz.jei.api.gui.drawable.IDrawable;
+import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
+import mezz.jei.api.gui.widgets.IRecipeWidget;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.gui.elements.DrawableResource;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
+import mezz.jei.library.gui.recipes.RecipeLayout;
+import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
 import net.creeperhost.sharerecipe.mixin.DrawableResourceAccessor;
+import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
+import net.creeperhost.sharerecipe.mixin.ScrollGridRecipeWidgetAccessor;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -46,6 +52,7 @@ import java.util.concurrent.CompletableFuture;
 
 public class ShareButtonController<T> implements IIconButtonController {
     private final IRecipeLayoutDrawable<T> layoutDrawable;
+    private static final String SHARE_RECIPE_API = "http://localhost:5000/";
 
     public ShareButtonController(IRecipeLayoutDrawable<T> layoutDrawable) {
         this.layoutDrawable = layoutDrawable;
@@ -117,12 +124,42 @@ public class ShareButtonController<T> implements IIconButtonController {
     public BackgroundRender renderBackground() {
         IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
 
+        RecipeLayoutAccessor accessor = (RecipeLayoutAccessor)drawable;
+        List<IRecipeWidget> allWidgets = accessor.sharerecipe$getAllWidgets();
+
+        ScrollGridRecipeWidget scrollWidget = null;
+
+        int index = 0;
+        for (; index < allWidgets.size(); index++) {
+            IRecipeWidget widget = allWidgets.get(index);
+            if (widget instanceof ScrollGridRecipeWidget) {
+                scrollWidget = (ScrollGridRecipeWidget) widget;
+                break;
+            }
+        }
+
+        int heightDifference = 0;
+
+        if (scrollWidget != null) {
+            ScrollGridRecipeWidgetAccessor theirWidget = (ScrollGridRecipeWidgetAccessor) scrollWidget;
+            int columns = theirWidget.sharerecipe$getColumns();
+            List<IRecipeSlotDrawable> slots = theirWidget.sharerecipe$getSlots();
+            int size = slots.size();
+            int rowsNeeded = (int) Math.ceil((double)size / (double)columns);
+            ScrollGridRecipeWidget scrollGridRecipeWidget = ScrollGridRecipeWidget.create(slots, columns, rowsNeeded);
+            heightDifference = scrollGridRecipeWidget.getHeight() - scrollWidget.getHeight();
+            allWidgets.add(index + 1, scrollGridRecipeWidget);
+            allWidgets.remove(index);
+        }
+
 
         Rect2i rect = drawable.getRect();
 
         int scale = 4;
         int logicalWidth = rect.getWidth();
         int logicalHeight = rect.getHeight();
+
+        logicalHeight += heightDifference;
 
         int bufferWidth = logicalWidth * scale;
         int bufferHeight = logicalHeight * scale;
@@ -134,7 +171,14 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
 
-        return new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings);
+        BackgroundRender backgroundRender = new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings);
+
+        if (scrollWidget != null) {
+            allWidgets.add(index+1, scrollWidget);
+            allWidgets.remove(index);
+        }
+
+        return backgroundRender;
     }
 
     @Override
@@ -192,7 +236,14 @@ public class ShareButtonController<T> implements IIconButtonController {
                 }
                 outputSlotNum++;
             }
-            RecipeData recipeData = new RecipeData(cat, inputs, outputs, ourBackground);
+            RecipeData.Modpack modpack = null;
+            ModPackInfo.VersionInfo info = ModPackInfo.getInfo();
+            if (!info.ftbPackID.isEmpty()) {
+                modpack = new RecipeData.Modpack(info.ftbPackID.substring(1), "FTB");
+            } else if (!info.curseID.isEmpty()) {
+                modpack = new RecipeData.Modpack(info.curseID, "Curseforge");
+            }
+            RecipeData recipeData = new RecipeData(cat, inputs, outputs, ourBackground, modpack);
 
             CompletableFuture.runAsync(() -> {
                 try {
@@ -209,8 +260,7 @@ public class ShareButtonController<T> implements IIconButtonController {
 
                     Gson gson = new Gson();
                     String json = gson.toJson(recipeData);
-                    System.out.println(json);
-                    URL url = new URI("http://localhost:5000/recipe").toURL();
+                    URL url = new URI(SHARE_RECIPE_API + "recipe").toURL();
                     HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
                     urlConnection.setRequestMethod("PUT");
                     urlConnection.setDoOutput(true);
@@ -247,11 +297,11 @@ public class ShareButtonController<T> implements IIconButtonController {
 
     public static boolean uploadBackground(byte[] image, String hash) {
         try {
-            URL url = new URI("http://localhost:5000/background/" + hash).toURL();
+            URL url = new URI(SHARE_RECIPE_API + "background/" + hash).toURL();
             HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
             urlConnection.setRequestMethod("HEAD");
             if (urlConnection.getResponseCode() == 404) {
-                url = new URI("http://localhost:5000/background").toURL();
+                url = new URI(SHARE_RECIPE_API + "background").toURL();
                 urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setDoOutput(true);
                 urlConnection.setRequestMethod("PUT");

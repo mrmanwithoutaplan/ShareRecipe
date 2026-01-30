@@ -51,10 +51,10 @@ public class NerfedGuiGraphics extends GuiGraphics {
     }
 
     @Override
-    public void renderItem(ItemStack itemStack, int i, int j) {
+    public void renderItem(ItemStack itemStack, int i  , int j) {
     }
 
-    @Override
+    @Override     
     public void renderItem(ItemStack itemStack, int i, int j, int k) {
     }
 
