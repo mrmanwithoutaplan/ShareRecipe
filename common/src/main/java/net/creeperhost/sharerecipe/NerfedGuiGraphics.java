@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.LivingEntity;
@@ -28,19 +29,8 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public int drawString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl) {
         Vector3f translation = new Vector3f();
         this.pose().last().pose().getTranslation(translation);
-        StringBuilder builder = new StringBuilder();
-        AtomicReference<Style> lastStyle = new AtomicReference<>();
-        List<StyleChange> styleChanges = new ArrayList<>();
-        formattedCharSequence.accept((i1, style, j1) -> {
-            if (style != null && !style.equals(lastStyle.get())) {
-                lastStyle.set(style);
-                styleChanges.add(new StyleChange(style, i1));
-            }
-            char blah = (char) j1;
-            builder.append(blah);
-            return true;
-        });
-        capturedStrings.add(new CapturedString(builder.toString(), (int) (translation.x() + i), (int) (translation.y() + j), k, bl, styleChanges));
+
+        capturedStrings.add(getCapturedString(font, formattedCharSequence, i, j, k, bl, (int) translation.x(), (int) translation.y()));
         return 0;
     }
 
@@ -72,5 +62,31 @@ public class NerfedGuiGraphics extends GuiGraphics {
 
     @Override
     public void renderItemDecorations(Font font, ItemStack itemStack, int i, int j, @Nullable String string) {
+    }
+
+    public static CapturedString getCapturedString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl, int translationX, int translationY) {
+        StringBuilder builder = new StringBuilder();
+        AtomicReference<Style> lastStyle = new AtomicReference<>();
+        List<StyleChange> styleChanges = new ArrayList<>();
+        formattedCharSequence.accept((i1, style, j1) -> {
+            if (style != null && !style.equals(lastStyle.get())) {
+                lastStyle.set(style);
+                styleChanges.add(new StyleChange(style, i1));
+            }
+            char blah = (char) j1;
+            builder.append(blah);
+            return true;
+        });
+        return new CapturedString(builder.toString(), (int) (translationX + i), (int) (translationY + j), k, bl, styleChanges);
+    }
+
+    public static List<CapturedString> getCapturedStrings(FormattedText formattedText) {
+        Font font = Minecraft.getInstance().font;
+        List<FormattedCharSequence> split = font.split(formattedText, Integer.MAX_VALUE);
+        List<CapturedString> capturedStrings = new ArrayList<>();
+        for (FormattedCharSequence formattedCharSequence : split) {
+            capturedStrings.add(getCapturedString(font, formattedCharSequence, 0, 0, 0xFFFFFFFF, false, 0, 0));
+        }
+        return capturedStrings;
     }
 }

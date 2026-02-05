@@ -5,12 +5,13 @@ import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.datafixers.util.Either;
+import com.mojang.datafixers.util.Pair;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.buttons.IButtonState;
 import mezz.jei.api.gui.buttons.IIconButtonController;
-import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -19,35 +20,36 @@ import mezz.jei.api.gui.widgets.IRecipeWidget;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
-import mezz.jei.common.gui.elements.DrawableResource;
+import mezz.jei.common.gui.JeiTooltip;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
-import mezz.jei.library.gui.recipes.RecipeLayout;
 import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
-import net.creeperhost.sharerecipe.mixin.DrawableResourceAccessor;
 import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
 import net.creeperhost.sharerecipe.mixin.ScrollGridRecipeWidgetAccessor;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.ItemStack;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.tuple.Triple;
 
+import javax.tools.Tool;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.CompletableFuture;
 
 public class ShareButtonController<T> implements IIconButtonController {
@@ -119,7 +121,8 @@ public class ShareButtonController<T> implements IIconButtonController {
         return null;
     }
 
-    public record BackgroundRender(byte[] image, int width, int height, List<NerfedGuiGraphics.CapturedString> strings) {}
+    public record BackgroundRender(byte[] image, int width, int height, List<NerfedGuiGraphics.CapturedString> strings,
+                                   HashMap<Rect2i, List<NerfedGuiGraphics.CapturedString>> tooltips) {}
 
     public BackgroundRender renderBackground() {
         IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
@@ -147,9 +150,15 @@ public class ShareButtonController<T> implements IIconButtonController {
             int size = slots.size();
             int rowsNeeded = (int) Math.ceil((double)size / (double)columns);
             ScrollGridRecipeWidget scrollGridRecipeWidget = ScrollGridRecipeWidget.create(slots, columns, rowsNeeded);
+            ScreenPosition position = scrollWidget.getPosition();
+            scrollGridRecipeWidget.setPosition(position.x(), position.y());
             heightDifference = scrollGridRecipeWidget.getHeight() - scrollWidget.getHeight();
-            allWidgets.add(index + 1, scrollGridRecipeWidget);
-            allWidgets.remove(index);
+            if (heightDifference > 0) {
+                allWidgets.add(index + 1, scrollGridRecipeWidget);
+                allWidgets.remove(index);
+            } else {
+                heightDifference = 0;
+            }
         }
 
 
@@ -161,6 +170,32 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         logicalHeight += heightDifference;
 
+        rect.setHeight(logicalHeight);
+
+        HashMap<String, Pair<JeiTooltip, List<Pair<Integer, Integer>>>> tooltips = new HashMap<>();
+
+        T recipe = drawable.getRecipe();
+        IRecipeSlotsView recipeSlotsView = drawable.getRecipeSlotsView();
+
+        for(int x = 0; x < logicalWidth * scale; x++) {
+            for (int y = 0; y < logicalHeight * scale; y++) {
+                JeiTooltip jeiTooltip = new JeiTooltip();
+                drawable.getRecipeCategory().getTooltip(jeiTooltip, recipe, recipeSlotsView, x, y);
+                for (IRecipeWidget allWidget : allWidgets) {
+                    ScreenPosition position = allWidget.getPosition();
+                    allWidget.getTooltip(jeiTooltip, x - position.x(), y - position.y());
+                }
+                String keyRep = jeiTooltip.toString();
+                if (keyRep.equals("[\n\n]")) continue;
+                if (!tooltips.containsKey(jeiTooltip.toString())) {
+                    Pair<JeiTooltip, List<Pair<Integer, Integer>>> tooltipHashmap = new Pair<>(jeiTooltip, new ArrayList<>());
+                    tooltips.put(keyRep, tooltipHashmap);
+                }
+                Pair<JeiTooltip, List<Pair<Integer, Integer>>> jeiTooltipListPair = tooltips.get(keyRep);
+                jeiTooltipListPair.getSecond().add(new Pair<>(x, y));
+            }
+        }
+
         int bufferWidth = logicalWidth * scale;
         int bufferHeight = logicalHeight * scale;
 
@@ -171,12 +206,62 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
 
-        BackgroundRender backgroundRender = new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings);
+        HashMap<JeiTooltip, List<Rect2i>> nuToolTips = new HashMap<>();
+
+        for (Pair<JeiTooltip, List<Pair<Integer, Integer>>> value : tooltips.values()) {
+            int currentColumn = -1;
+            int startRow = -1;
+            int prevRow = -1;
+            List<Triple<Integer, Integer, Integer>> lines = new ArrayList<>();
+            for (Pair<Integer, Integer> integerIntegerPair : value.getSecond()) {
+                int column = integerIntegerPair.getFirst();
+                int row = integerIntegerPair.getSecond();
+                if(column != currentColumn) {
+                    if (currentColumn != -1) {
+                        lines.add(Triple.of(currentColumn, startRow, prevRow - startRow));
+                    }
+                    currentColumn = column;
+                    startRow = row;
+                }
+                prevRow = row;
+            }
+
+            int columnStart = lines.getFirst().getLeft();
+            int rowStart = lines.getFirst().getMiddle();
+            int length = lines.getFirst().getRight();
+            int columnEnd = lines.getLast().getLeft();
+
+            List<Rect2i> rectList = new ArrayList<>();
+            rectList.add(new Rect2i(columnStart, rowStart, columnEnd - columnStart, length));
+            nuToolTips.put(value.getFirst(), rectList);
+        }
+
+        HashMap<Rect2i, List<NerfedGuiGraphics.CapturedString>> finalTooltips = new HashMap<>();
+
+        for (Map.Entry<JeiTooltip, List<Rect2i>> jeiTooltipSet : nuToolTips.entrySet()) {
+            JeiTooltip jeiTooltip = jeiTooltipSet.getKey();
+            for (Either<FormattedText, TooltipComponent> line : jeiTooltip.getLines()) {
+                if(line.left().isPresent()) {
+                    List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(line.left().get());
+                    for (Rect2i rect2i : jeiTooltipSet.getValue()) {
+                        if (finalTooltips.containsKey(rect2i)) {
+                            finalTooltips.get(rect2i).addAll(capturedStrings);
+                        } else {
+                            finalTooltips.put(rect2i, capturedStrings);
+                        }
+                    }
+                }
+            }
+        }
+
+        BackgroundRender backgroundRender = new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings, finalTooltips);
 
         if (scrollWidget != null) {
             allWidgets.add(index+1, scrollWidget);
             allWidgets.remove(index);
         }
+
+        rect.setHeight(logicalHeight - heightDifference);
 
         return backgroundRender;
     }
@@ -193,7 +278,14 @@ public class ShareButtonController<T> implements IIconButtonController {
 
             String backgroundSha = DigestUtils.sha1Hex(backgroundRender.image());
 
-            Background ourBackground = new Background(backgroundSha, backgroundRender.width(), backgroundRender.height(), backgroundRender.strings());
+            List<Tooltip> tooltips = new ArrayList<>();
+
+            for (Map.Entry<Rect2i, List<NerfedGuiGraphics.CapturedString>> rect2iListEntry : backgroundRender.tooltips().entrySet()) {
+                Rect2i area = rect2iListEntry.getKey();
+                tooltips.add(new Tooltip(area, rect2iListEntry.getValue()));
+            }
+
+            Background ourBackground = new Background(backgroundSha, backgroundRender.width(), backgroundRender.height(), backgroundRender.strings(), tooltips);
             String cat = recipeCategory.getTitle().getString();
             IRecipeSlotsView recipeSlotsView = recipeLayout.getRecipeSlotsView();
             List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
@@ -333,4 +425,6 @@ public class ShareButtonController<T> implements IIconButtonController {
     public void updateState(IButtonState state) {
         IIconButtonController.super.updateState(state);
     }
+
+    public record Tooltip(Rect2i area, List<NerfedGuiGraphics.CapturedString> strings) {}
 }
