@@ -21,22 +21,28 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public record StyleChange(Style style, int start) {}
     public record CapturedString(String string, int x, int y, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
     public List<CapturedString> capturedStrings = new ArrayList<>();
-    public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource) {
+    public int scale;
+    public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource, int scale) {
         super(minecraft, bufferSource);
+        this.scale = scale;
     }
 
     @Override
     public int drawString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl) {
+//        super.drawString(font, formattedCharSequence, i, j, k, bl);
         Vector3f translation = new Vector3f();
         this.pose().last().pose().getTranslation(translation);
 
-        capturedStrings.add(getCapturedString(font, formattedCharSequence, i, j, k, bl, (int) translation.x(), (int) translation.y()));
+        capturedStrings.add(getCapturedString(font, formattedCharSequence, i * scale, j * scale, k, bl, (int) translation.x(), (int) translation.y()));
         return 0;
     }
 
     @Override
     public int drawString(Font font, @Nullable String string, int i, int j, int k, boolean bl) {
-        capturedStrings.add(new CapturedString(string, i, j, k, bl, new ArrayList<>()));
+//        super.drawString(font, string, i, j, k, bl);
+        Vector3f translation = new Vector3f();
+        this.pose().last().pose().getTranslation(translation);
+        capturedStrings.add(new CapturedString(string, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), k, bl, new ArrayList<>()));
         return 0;
     }
 
@@ -77,7 +83,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
             builder.append(blah);
             return true;
         });
-        return new CapturedString(builder.toString(), (int) (translationX + i), (int) (translationY + j), k, bl, styleChanges);
+        return new CapturedString(builder.toString(), translationX + i , translationY + j, k, bl, styleChanges);
     }
 
     public static List<CapturedString> getCapturedStrings(FormattedText formattedText) {

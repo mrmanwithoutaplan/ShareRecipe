@@ -120,11 +120,14 @@ public class ShareButtonController<T> implements IIconButtonController {
         }
         return null;
     }
+    public record OffsetSlots(int offsetX, int offsetY, List<IRecipeSlotDrawable> slots) {}
+
+    public record BackgroundRenderReturn(BackgroundRender render, OffsetSlots slots) {}
 
     public record BackgroundRender(byte[] image, int width, int height, List<NerfedGuiGraphics.CapturedString> strings,
                                    HashMap<Rect2i, List<NerfedGuiGraphics.CapturedString>> tooltips) {}
 
-    public BackgroundRender renderBackground() {
+    public BackgroundRenderReturn renderBackground() {
         IRecipeLayoutDrawable<T> drawable = this.layoutDrawable;
 
         RecipeLayoutAccessor accessor = (RecipeLayoutAccessor)drawable;
@@ -143,6 +146,8 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         int heightDifference = 0;
 
+        OffsetSlots offsetSlots = null;
+
         if (scrollWidget != null) {
             ScrollGridRecipeWidgetAccessor theirWidget = (ScrollGridRecipeWidgetAccessor) scrollWidget;
             int columns = theirWidget.sharerecipe$getColumns();
@@ -151,6 +156,9 @@ public class ShareButtonController<T> implements IIconButtonController {
             int rowsNeeded = (int) Math.ceil((double)size / (double)columns);
             ScrollGridRecipeWidget scrollGridRecipeWidget = ScrollGridRecipeWidget.create(slots, columns, rowsNeeded);
             ScreenPosition position = scrollWidget.getPosition();
+            int slotOffsetX = position.x();
+            int slotOffsetY = position.y();
+            offsetSlots = new OffsetSlots(slotOffsetX, slotOffsetY, slots);
             scrollGridRecipeWidget.setPosition(position.x(), position.y());
             heightDifference = scrollGridRecipeWidget.getHeight() - scrollWidget.getHeight();
             if (heightDifference > 0) {
@@ -204,7 +212,7 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         Minecraft client = Minecraft.getInstance();
 
-        NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource());
+        NerfedGuiGraphics guiGraphics = new NerfedGuiGraphics(client, client.renderBuffers().bufferSource(), scale);
 
         HashMap<JeiTooltip, List<Rect2i>> nuToolTips = new HashMap<>();
 
@@ -254,7 +262,7 @@ public class ShareButtonController<T> implements IIconButtonController {
             }
         }
 
-        BackgroundRender backgroundRender = new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings, finalTooltips);
+        BackgroundRenderReturn backgroundRender = new BackgroundRenderReturn(new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings, finalTooltips), offsetSlots);
 
         if (scrollWidget != null) {
             allWidgets.add(index+1, scrollWidget);
@@ -273,8 +281,10 @@ public class ShareButtonController<T> implements IIconButtonController {
 
             IRecipeLayoutDrawable<?> recipeLayout = this.layoutDrawable;
             IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
+            BackgroundRenderReturn backgroundRenderReturn = renderBackground();
 
-            BackgroundRender backgroundRender = renderBackground();
+            BackgroundRender backgroundRender = backgroundRenderReturn.render();
+            OffsetSlots slots = backgroundRenderReturn.slots();
 
             String backgroundSha = DigestUtils.sha1Hex(backgroundRender.image());
 
@@ -296,6 +306,10 @@ public class ShareButtonController<T> implements IIconButtonController {
             for (IRecipeSlotView inputSlot : inputSlots) {
                 if (inputSlot instanceof RecipeSlot recipeSlot) {
                     Rect2i rect = recipeSlot.getRect();
+                    if (slots != null && slots.slots.contains(recipeSlot)) {
+                        rect.setX(rect.getX() + slots.offsetX());
+                        rect.setY(rect.getY() + slots.offsetY());
+                    }
                     List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
                     List<ShareIngredient> shareIngredient = new ArrayList<>();
                     list.stream()
@@ -319,6 +333,10 @@ public class ShareButtonController<T> implements IIconButtonController {
                 if (outputSlot instanceof RecipeSlot) {
                     Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
                     Rect2i rect = ((RecipeSlot) outputSlot).getRect();
+                    if (slots != null && slots.slots.contains(outputSlot)) {
+                        rect.setX(rect.getX() + slots.offsetX());
+                        rect.setY(rect.getY() + slots.offsetY());
+                    }
                     if (stack.isPresent()) {
                         ItemStack iStack = stack.get();
                         ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
