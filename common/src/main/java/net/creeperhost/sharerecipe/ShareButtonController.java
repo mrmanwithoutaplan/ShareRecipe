@@ -371,6 +371,8 @@ public class ShareButtonController<T> implements IIconButtonController {
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
                     } else {
+                        InputStream inputStream = urlConnection.getErrorStream();
+                        String body = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
                         if (Minecraft.getInstance().player != null) {
                             Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
