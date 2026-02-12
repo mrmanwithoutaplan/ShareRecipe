@@ -21,6 +21,7 @@ import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.gui.JeiTooltip;
+import mezz.jei.common.util.ImmutableRect2i;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
 import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
 import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
@@ -106,7 +107,6 @@ public class ShareButtonController<T> implements IIconButtonController {
         image.downloadTexture(0, false);
         image.flipY();
 
-
         try {
             return image.asByteArray();
 //            image.writeToFile(new File(client.gameDirectory, "render_debug.png"));
@@ -148,6 +148,8 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         OffsetSlots offsetSlots = null;
 
+        ImmutableRect2i rect = ((RecipeLayoutAccessor)drawable).sharerecipe$getArea();
+
         if (scrollWidget != null) {
             ScrollGridRecipeWidgetAccessor theirWidget = (ScrollGridRecipeWidgetAccessor) scrollWidget;
             int columns = theirWidget.sharerecipe$getColumns();
@@ -164,21 +166,20 @@ public class ShareButtonController<T> implements IIconButtonController {
             if (heightDifference > 0) {
                 allWidgets.add(index + 1, scrollGridRecipeWidget);
                 allWidgets.remove(index);
+                Rect2i mutable = rect.toMutable();
+                mutable.setHeight(rect.getHeight() + heightDifference);
+                ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(new ImmutableRect2i(mutable));
             } else {
                 heightDifference = 0;
             }
         }
 
 
-        Rect2i rect = drawable.getRect();
-
         int scale = 4;
         int logicalWidth = rect.getWidth();
         int logicalHeight = rect.getHeight();
 
         logicalHeight += heightDifference;
-
-        rect.setHeight(logicalHeight);
 
         HashMap<String, Pair<JeiTooltip, List<Pair<Integer, Integer>>>> tooltips = new HashMap<>();
 
@@ -262,14 +263,15 @@ public class ShareButtonController<T> implements IIconButtonController {
             }
         }
 
-        BackgroundRenderReturn backgroundRender = new BackgroundRenderReturn(new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect, guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings, finalTooltips), offsetSlots);
+        BackgroundRenderReturn backgroundRender = new BackgroundRenderReturn(new BackgroundRender(this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect.toMutable(), guiGraphics), bufferWidth, bufferHeight, guiGraphics.capturedStrings, finalTooltips), offsetSlots);
 
         if (scrollWidget != null) {
-            allWidgets.add(index+1, scrollWidget);
-            allWidgets.remove(index);
+            if (heightDifference > 0) {
+                allWidgets.add(index + 1, scrollWidget);
+                allWidgets.remove(index);
+                ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(rect);
+            }
         }
-
-        rect.setHeight(logicalHeight - heightDifference);
 
         return backgroundRender;
     }

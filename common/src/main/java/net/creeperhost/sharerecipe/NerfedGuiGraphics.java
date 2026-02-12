@@ -19,7 +19,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class NerfedGuiGraphics extends GuiGraphics {
     public record StyleChange(Style style, int start) {}
-    public record CapturedString(String string, int x, int y, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
+    public record CapturedString(String string, int x, int y, float width, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
     public List<CapturedString> capturedStrings = new ArrayList<>();
     public int scale;
     public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource, int scale) {
@@ -31,9 +31,11 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public int drawString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl) {
 //        super.drawString(font, formattedCharSequence, i, j, k, bl);
         Vector3f translation = new Vector3f();
+        Vector3f scaleVector = new Vector3f();
         this.pose().last().pose().getTranslation(translation);
-
-        capturedStrings.add(getCapturedString(font, formattedCharSequence, i * scale, j * scale, k, bl, (int) translation.x(), (int) translation.y()));
+        this.pose().last().pose().getScale(scaleVector);
+        float width = font.width(formattedCharSequence) * scaleVector.y();
+        capturedStrings.add(getCapturedString(font, formattedCharSequence, i * scale, j * scale, width, k, bl, (int) translation.x(), (int) translation.y()));
         return 0;
     }
 
@@ -41,8 +43,11 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public int drawString(Font font, @Nullable String string, int i, int j, int k, boolean bl) {
 //        super.drawString(font, string, i, j, k, bl);
         Vector3f translation = new Vector3f();
+        Vector3f scaleVector = new Vector3f();
+        this.pose().last().pose().getScale(scaleVector);
+        float width = font.width(string) * scaleVector.y();
         this.pose().last().pose().getTranslation(translation);
-        capturedStrings.add(new CapturedString(string, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), k, bl, new ArrayList<>()));
+        capturedStrings.add(new CapturedString(string, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl, new ArrayList<>()));
         return 0;
     }
 
@@ -70,7 +75,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public void renderItemDecorations(Font font, ItemStack itemStack, int i, int j, @Nullable String string) {
     }
 
-    public static CapturedString getCapturedString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl, int translationX, int translationY) {
+    public static CapturedString getCapturedString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, float width, int k, boolean bl, int translationX, int translationY) {
         StringBuilder builder = new StringBuilder();
         AtomicReference<Style> lastStyle = new AtomicReference<>();
         List<StyleChange> styleChanges = new ArrayList<>();
@@ -83,7 +88,8 @@ public class NerfedGuiGraphics extends GuiGraphics {
             builder.append(blah);
             return true;
         });
-        return new CapturedString(builder.toString(), translationX + i , translationY + j, k, bl, styleChanges);
+        if (width == 0) width = font.width(formattedCharSequence);
+        return new CapturedString(builder.toString(), translationX + i , translationY + j, width, k, bl, styleChanges);
     }
 
     public static List<CapturedString> getCapturedStrings(FormattedText formattedText) {
@@ -91,7 +97,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
         List<FormattedCharSequence> split = font.split(formattedText, Integer.MAX_VALUE);
         List<CapturedString> capturedStrings = new ArrayList<>();
         for (FormattedCharSequence formattedCharSequence : split) {
-            capturedStrings.add(getCapturedString(font, formattedCharSequence, 0, 0, 0xFFFFFFFF, false, 0, 0));
+            capturedStrings.add(getCapturedString(font, formattedCharSequence, 0, 0, 0, 0xFFFFFFFF, false, 0, 0));
         }
         return capturedStrings;
     }
