@@ -1,4 +1,5 @@
 package net.creeperhost.sharerecipe;
 
-public record ShareIngredient(String name, int count, String type) {
+public record ShareIngredient(String name, int count, String type,
+                              ShareButtonController.Tooltip tooltip) {
 }

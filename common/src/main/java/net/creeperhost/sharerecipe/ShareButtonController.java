@@ -37,13 +37,15 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.TooltipFlag;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Triple;
 
-import javax.tools.Tool;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
@@ -303,6 +305,10 @@ public class ShareButtonController<T> implements IIconButtonController {
             List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
             List<IRecipeSlotView> outputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.OUTPUT);
 
+            Minecraft minecraft = Minecraft.getInstance();
+            Player player = minecraft.player;
+            Item.TooltipContext tooltipContext = Item.TooltipContext.of(minecraft.level);
+
             int i = 0;
             List<ShareSlot> inputs =  new ArrayList<>();
             for (IRecipeSlotView inputSlot : inputSlots) {
@@ -314,16 +320,28 @@ public class ShareButtonController<T> implements IIconButtonController {
                     }
                     List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
                     List<ShareIngredient> shareIngredient = new ArrayList<>();
-                    list.stream()
-                        .filter(iTypedIngredient -> iTypedIngredient.getType() == VanillaTypes.ITEM_STACK)
-                        .map(ITypedIngredient::getItemStack)
-                        .filter(Optional::isPresent)
-                        .map(Optional::get)
-                        .forEach(stack -> {
-                            ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                            shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack"));
+                    for (ITypedIngredient<?> iTypedIngredient : list) {
+                        if (iTypedIngredient.getType() == VanillaTypes.ITEM_STACK) {
+                            Optional<ItemStack> itemStack = iTypedIngredient.getItemStack();
+                            if (itemStack.isPresent()) {
+                                ItemStack stack = itemStack.get();
+                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                                List<Component> tooltipLines = stack.getTooltipLines(tooltipContext, player, TooltipFlag.NORMAL);
+                                List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(tooltipLines
+                                        .stream()
+                                        .map(NerfedGuiGraphics::getCapturedStrings)
+                                        .flatMap(Collection::stream)
+                                        .toList());
+                                Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(iTypedIngredient);
+                                if (modNameForTooltip.isPresent()) {
+                                    List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
+                                    itemTooltips.addAll(capturedStrings);
+                                }
+                                Tooltip tooltip = new Tooltip(rect, itemTooltips);
+                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack", tooltip));
+                            }
                         }
-                    );
+                    }
                     inputs.add(new ShareSlot(i, rect, shareIngredient));
                 }
                 i++;
@@ -342,7 +360,24 @@ public class ShareButtonController<T> implements IIconButtonController {
                     if (stack.isPresent()) {
                         ItemStack iStack = stack.get();
                         ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
-                        outputs.add(new ShareSlot(outputSlotNum, rect, List.of(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack"))));
+                        List<Component> tooltipLines = iStack.getTooltipLines(tooltipContext, player, TooltipFlag.NORMAL);
+                        List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(tooltipLines
+                                .stream()
+                                .map(NerfedGuiGraphics::getCapturedStrings)
+                                .flatMap(Collection::stream)
+                                .toList());
+
+                        Optional<ITypedIngredient<?>> displayedIngredient = outputSlot.getDisplayedIngredient();
+                        if (displayedIngredient.isPresent()) {
+                            Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(displayedIngredient.get());
+                            if (modNameForTooltip.isPresent()) {
+                                List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
+                                itemTooltips.addAll(capturedStrings);
+                            }
+                        }
+
+                        Tooltip tooltip = new Tooltip(rect, itemTooltips);
+                        outputs.add(new ShareSlot(outputSlotNum, rect, List.of(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack", tooltip))));
 //                                System.out.println("OUTPUT: " + stack.get());
                     }
                 }
@@ -387,7 +422,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                         if (Minecraft.getInstance().player != null) {
                             MutableComponent link = Component.literal(shareResult.url);
                             link.setStyle(link.getStyle().applyFormat(ChatFormatting.BLUE).applyFormat(ChatFormatting.UNDERLINE).withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, shareResult.url)));
-                            Component finished = Component.literal("[ShareRecipe] Your content is now available on ShareRecipe! ").append(link);
+                            Component finished = Component.literal("[ShareRecipe] Your content is now available on ShareRecipe!").append(link);
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
                     } else {
@@ -400,7 +435,9 @@ public class ShareButtonController<T> implements IIconButtonController {
                     }
 
                     urlConnection.disconnect();
-                } catch (Exception e2) {}
+                } catch (Exception e2) {
+                    e2.printStackTrace();
+                }
             });
 
         } catch (Exception ex) {
