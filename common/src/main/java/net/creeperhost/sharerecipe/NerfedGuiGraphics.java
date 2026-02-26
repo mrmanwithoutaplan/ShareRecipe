@@ -1,5 +1,6 @@
 package net.creeperhost.sharerecipe;
 
+import com.mojang.datafixers.util.Pair;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -10,7 +11,6 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
-import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import java.util.ArrayList;
@@ -18,8 +18,11 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class NerfedGuiGraphics extends GuiGraphics {
-    public record StyleChange(Style style, int start) {}
-    public record CapturedString(String string, int x, int y, float width, int colour, boolean renderShadow, List<StyleChange> styleChanges) {}
+    public record StringWithStyle(String string, Style style) {
+
+    }
+    public record CapturedString(List<StringWithStyle> strings, int x, int y, float width, int colour, boolean renderShadow) {
+    }
     public List<CapturedString> capturedStrings = new ArrayList<>();
     public int scale;
     public NerfedGuiGraphics(Minecraft minecraft, MultiBufferSource.BufferSource bufferSource, int scale) {
@@ -29,7 +32,6 @@ public class NerfedGuiGraphics extends GuiGraphics {
 
     @Override
     public int drawString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, int k, boolean bl) {
-//        super.drawString(font, formattedCharSequence, i, j, k, bl);
         Vector3f translation = new Vector3f();
         Vector3f scaleVector = new Vector3f();
         this.pose().last().pose().getTranslation(translation);
@@ -41,13 +43,13 @@ public class NerfedGuiGraphics extends GuiGraphics {
 
     @Override
     public int drawString(Font font, @Nullable String string, int i, int j, int k, boolean bl) {
-//        super.drawString(font, string, i, j, k, bl);
         Vector3f translation = new Vector3f();
         Vector3f scaleVector = new Vector3f();
         this.pose().last().pose().getScale(scaleVector);
         float width = font.width(string) * scaleVector.y();
         this.pose().last().pose().getTranslation(translation);
-        capturedStrings.add(new CapturedString(string, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl, new ArrayList<>()));
+        List<StringWithStyle> pairs = List.of(new StringWithStyle(string, Style.EMPTY));
+        capturedStrings.add(new CapturedString(pairs, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl));
         return 0;
     }
 
@@ -55,7 +57,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
     public void renderItem(ItemStack itemStack, int i  , int j) {
     }
 
-    @Override     
+    @Override
     public void renderItem(ItemStack itemStack, int i, int j, int k) {
     }
 
@@ -77,19 +79,22 @@ public class NerfedGuiGraphics extends GuiGraphics {
 
     public static CapturedString getCapturedString(Font font, FormattedCharSequence formattedCharSequence, int i, int j, float width, int k, boolean bl, int translationX, int translationY) {
         StringBuilder builder = new StringBuilder();
-        AtomicReference<Style> lastStyle = new AtomicReference<>();
-        List<StyleChange> styleChanges = new ArrayList<>();
+        AtomicReference<Style> lastStyle = new AtomicReference<>(Style.EMPTY);
+        List<StringWithStyle> stringStyles = new ArrayList<>();
         formattedCharSequence.accept((i1, style, j1) -> {
-            if (style != null && !style.equals(lastStyle.get())) {
-                lastStyle.set(style);
-                styleChanges.add(new StyleChange(style, i1));
-            }
             char blah = (char) j1;
+            if (!lastStyle.get().equals(style)) {
+                if (style == null) style = Style.EMPTY;
+                if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+                builder.delete(0, builder.length());
+                lastStyle.set(style);
+            }
             builder.append(blah);
             return true;
         });
+        if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
         if (width == 0) width = font.width(formattedCharSequence);
-        return new CapturedString(builder.toString(), translationX + i , translationY + j, width, k, bl, styleChanges);
+        return new CapturedString(stringStyles, translationX + i , translationY + j, width, k, bl);
     }
 
     public static List<CapturedString> getCapturedStrings(FormattedText formattedText) {

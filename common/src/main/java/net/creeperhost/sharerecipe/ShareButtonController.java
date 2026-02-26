@@ -422,7 +422,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                         if (Minecraft.getInstance().player != null) {
                             MutableComponent link = Component.literal(shareResult.url);
                             link.setStyle(link.getStyle().applyFormat(ChatFormatting.BLUE).applyFormat(ChatFormatting.UNDERLINE).withClickEvent(new ClickEvent(ClickEvent.Action.OPEN_URL, shareResult.url)));
-                            Component finished = Component.literal("[ShareRecipe] Your content is now available on ShareRecipe!").append(link);
+                            Component finished = Component.literal("[ShareRecipe] Your content is now available on ShareRecipe! ").append(link);
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
                     } else {
