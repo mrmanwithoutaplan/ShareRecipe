@@ -25,6 +25,7 @@ import mezz.jei.common.util.ImmutableRect2i;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
 import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
 import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
+import net.creeperhost.sharerecipe.mixin.RecipeSlotAccessor;
 import net.creeperhost.sharerecipe.mixin.ScrollGridRecipeWidgetAccessor;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
@@ -318,28 +319,42 @@ public class ShareButtonController<T> implements IIconButtonController {
                         rect.setX(rect.getX() + slots.offsetX());
                         rect.setY(rect.getY() + slots.offsetY());
                     }
+
                     List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
                     List<ShareIngredient> shareIngredient = new ArrayList<>();
                     for (ITypedIngredient<?> iTypedIngredient : list) {
+                        JeiTooltip jeiTooltip = new JeiTooltip();
+                        RecipeSlotAccessor recipeSlot1 = (RecipeSlotAccessor) recipeSlot;
+                        recipeSlot1.shareRecipe$getTooltip(jeiTooltip, iTypedIngredient);
+                        Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(iTypedIngredient);
+                        List<Either<FormattedText, TooltipComponent>> lines = jeiTooltip.getLines();
+                        List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(lines
+                                .stream()
+                                .filter(l -> l.left().isPresent())
+                                .map(l -> {
+                                    if (l.left().isPresent()) {
+                                        return l.left().get();
+                                    }
+                                    return null;
+                                })
+                                .filter(Objects::nonNull)
+                                .map(NerfedGuiGraphics::getCapturedStrings)
+                                .flatMap(Collection::stream)
+                                .toList());
+                        if (modNameForTooltip.isPresent()) {
+                            List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
+                            itemTooltips.addAll(capturedStrings);
+                        }
+                        Tooltip tooltip = new Tooltip(rect, itemTooltips);
                         if (iTypedIngredient.getType() == VanillaTypes.ITEM_STACK) {
                             Optional<ItemStack> itemStack = iTypedIngredient.getItemStack();
                             if (itemStack.isPresent()) {
                                 ItemStack stack = itemStack.get();
                                 ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                                List<Component> tooltipLines = stack.getTooltipLines(tooltipContext, player, TooltipFlag.NORMAL);
-                                List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(tooltipLines
-                                        .stream()
-                                        .map(NerfedGuiGraphics::getCapturedStrings)
-                                        .flatMap(Collection::stream)
-                                        .toList());
-                                Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(iTypedIngredient);
-                                if (modNameForTooltip.isPresent()) {
-                                    List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
-                                    itemTooltips.addAll(capturedStrings);
-                                }
-                                Tooltip tooltip = new Tooltip(rect, itemTooltips);
                                 shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack", tooltip));
                             }
+                        } else {
+                            shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, iTypedIngredient.getType().getUid(), tooltip));
                         }
                     }
                     inputs.add(new ShareSlot(i, rect, shareIngredient));
@@ -350,38 +365,53 @@ public class ShareButtonController<T> implements IIconButtonController {
             int outputSlotNum = 0;
             List<ShareSlot> outputs = new ArrayList<>();
             for (IRecipeSlotView outputSlot : outputSlots) {
-                if (outputSlot instanceof RecipeSlot) {
-                    Optional<ItemStack> stack = outputSlot.getDisplayedItemStack();
-                    Rect2i rect = ((RecipeSlot) outputSlot).getRect();
-                    if (slots != null && slots.slots.contains(outputSlot)) {
+                if (outputSlot instanceof RecipeSlot recipeSlot) {
+                    Rect2i rect = recipeSlot.getRect();
+                    if (slots != null && slots.slots.contains(recipeSlot)) {
                         rect.setX(rect.getX() + slots.offsetX());
                         rect.setY(rect.getY() + slots.offsetY());
                     }
-                    if (stack.isPresent()) {
-                        ItemStack iStack = stack.get();
-                        ResourceLocation rs = BuiltInRegistries.ITEM.getKey(iStack.getItem());
-                        List<Component> tooltipLines = iStack.getTooltipLines(tooltipContext, player, TooltipFlag.NORMAL);
-                        List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(tooltipLines
+
+                    List<ITypedIngredient<?>> list = outputSlot.getAllIngredients().toList();
+                    List<ShareIngredient> shareIngredient = new ArrayList<>();
+                    for (ITypedIngredient<?> iTypedIngredient : list) {
+                        JeiTooltip jeiTooltip = new JeiTooltip();
+                        RecipeSlotAccessor recipeSlot1 = (RecipeSlotAccessor) recipeSlot;
+                        recipeSlot1.shareRecipe$getTooltip(jeiTooltip, iTypedIngredient);
+                        Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(iTypedIngredient);
+                        List<Either<FormattedText, TooltipComponent>> lines = jeiTooltip.getLines();
+                        List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(lines
                                 .stream()
+                                .filter(l -> l.left().isPresent())
+                                .map(l -> {
+                                    if (l.left().isPresent()) {
+                                        return l.left().get();
+                                    }
+                                    return null;
+                                })
+                                .filter(Objects::nonNull)
                                 .map(NerfedGuiGraphics::getCapturedStrings)
                                 .flatMap(Collection::stream)
                                 .toList());
-
-                        Optional<ITypedIngredient<?>> displayedIngredient = outputSlot.getDisplayedIngredient();
-                        if (displayedIngredient.isPresent()) {
-                            Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(displayedIngredient.get());
-                            if (modNameForTooltip.isPresent()) {
-                                List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
-                                itemTooltips.addAll(capturedStrings);
-                            }
+                        if (modNameForTooltip.isPresent()) {
+                            List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
+                            itemTooltips.addAll(capturedStrings);
                         }
-
                         Tooltip tooltip = new Tooltip(rect, itemTooltips);
-                        outputs.add(new ShareSlot(outputSlotNum, rect, List.of(new ShareIngredient(rs.toString(), iStack.getCount(), "itemstack", tooltip))));
-//                                System.out.println("OUTPUT: " + stack.get());
+                        if (iTypedIngredient.getType() == VanillaTypes.ITEM_STACK) {
+                            Optional<ItemStack> itemStack = iTypedIngredient.getItemStack();
+                            if (itemStack.isPresent()) {
+                                ItemStack stack = itemStack.get();
+                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
+                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack", tooltip));
+                            }
+                        } else {
+                            shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, iTypedIngredient.getType().getUid(), tooltip));
+                        }
                     }
+                    outputs.add(new ShareSlot(i, rect, shareIngredient));
                 }
-                outputSlotNum++;
+                i++;
             }
             RecipeData.Modpack modpack = null;
             ModPackInfo.VersionInfo info = ModPackInfo.getInfo();
@@ -399,7 +429,7 @@ public class ShareButtonController<T> implements IIconButtonController {
 
                     if (!b) {
                         if (Minecraft.getInstance().player != null) {
-                            Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
+                            Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe (background).");
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
                         return;
@@ -429,6 +459,8 @@ public class ShareButtonController<T> implements IIconButtonController {
                         InputStream inputStream = urlConnection.getErrorStream();
                         String body = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
                         if (Minecraft.getInstance().player != null) {
+                            System.out.println(urlConnection.getResponseCode());
+                            System.out.println(body);
                             Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
@@ -457,6 +489,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                 urlConnection.setDoOutput(true);
                 urlConnection.setRequestMethod("PUT");
                 urlConnection.getOutputStream().write(image);
+                System.out.println(urlConnection.getResponseCode());
                 if (urlConnection.getResponseCode() == 204) {
                     return true;
                 }
@@ -465,6 +498,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                 return true;
             }
         } catch (Exception e) {
+            System.out.println(e.getMessage());
             e.printStackTrace();
         }
         return false;
