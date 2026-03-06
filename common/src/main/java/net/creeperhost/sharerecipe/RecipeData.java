@@ -5,15 +5,13 @@ import java.util.List;
 public class RecipeData
 {
     String recipeCategory;
-    List<ShareSlot> inputs;
-    List<ShareSlot> outputs;
+    List<ShareSlot> slots;
     Background background;
     Modpack modpack;
 
-    public RecipeData(String recipe_category, List<ShareSlot> inputs, List<ShareSlot> outputs, Background background, Modpack modpack) {
+    public RecipeData(String recipe_category, List<ShareSlot> slots, Background background, Modpack modpack) {
         this.recipeCategory = recipe_category;
-        this.inputs = inputs;
-        this.outputs = outputs;
+        this.slots = slots;
         this.background = background;
         this.modpack = modpack;
     }

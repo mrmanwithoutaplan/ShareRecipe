@@ -5,12 +5,14 @@
   "minVersion": "0.8",
   "client": [
     "DrawableResourceAccessor",
-    "TickTimerMixin"
-  ],
-  "mixins": [
+    "TickTimerMixin",
     "RecipeLayoutAccessor",
     "RecipeSlotAccessor",
+    "ScrollBoxRecipeWidgetAccessor",
     "ScrollGridRecipeWidgetAccessor"
+  ],
+  "mixins": [
+
   ],
   "injectors": {
     "defaultRequire": 1

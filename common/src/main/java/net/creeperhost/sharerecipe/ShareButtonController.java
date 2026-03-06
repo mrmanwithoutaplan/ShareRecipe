@@ -12,25 +12,28 @@ import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
 import mezz.jei.api.gui.buttons.IButtonState;
 import mezz.jei.api.gui.buttons.IIconButtonController;
+import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.gui.widgets.IRecipeWidget;
 import mezz.jei.api.ingredients.ITypedIngredient;
-import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.gui.JeiTooltip;
 import mezz.jei.common.util.ImmutableRect2i;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
+import mezz.jei.library.gui.widgets.ScrollBoxRecipeWidget;
 import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
 import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
 import net.creeperhost.sharerecipe.mixin.RecipeSlotAccessor;
+import net.creeperhost.sharerecipe.mixin.ScrollBoxRecipeWidgetAccessor;
 import net.creeperhost.sharerecipe.mixin.ScrollGridRecipeWidgetAccessor;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenPosition;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.ClickEvent;
@@ -42,7 +45,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TooltipFlag;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Triple;
@@ -137,13 +139,18 @@ public class ShareButtonController<T> implements IIconButtonController {
         List<IRecipeWidget> allWidgets = accessor.sharerecipe$getAllWidgets();
 
         ScrollGridRecipeWidget scrollWidget = null;
+        ScrollBoxRecipeWidget boxWidget = null;
 
-        int index = 0;
-        for (; index < allWidgets.size(); index++) {
-            IRecipeWidget widget = allWidgets.get(index);
+        int scrollIndex = 0;
+        int boxIndex = 0;
+        for (int index = 0; index < allWidgets.size(); index++) {
+            IRecipeWidget widget = allWidgets.get(scrollIndex);
             if (widget instanceof ScrollGridRecipeWidget) {
                 scrollWidget = (ScrollGridRecipeWidget) widget;
-                break;
+                scrollIndex = index;
+            } else if (widget instanceof ScrollBoxRecipeWidget) {
+                boxWidget = (ScrollBoxRecipeWidget) widget;
+                boxIndex = index;
             }
         }
 
@@ -167,8 +174,30 @@ public class ShareButtonController<T> implements IIconButtonController {
             scrollGridRecipeWidget.setPosition(position.x(), position.y());
             heightDifference = scrollGridRecipeWidget.getHeight() - scrollWidget.getHeight();
             if (heightDifference > 0) {
-                allWidgets.add(index + 1, scrollGridRecipeWidget);
-                allWidgets.remove(index);
+                allWidgets.add(scrollIndex + 1, scrollGridRecipeWidget);
+                allWidgets.remove(scrollIndex);
+                Rect2i mutable = rect.toMutable();
+                mutable.setHeight(rect.getHeight() + heightDifference);
+                ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(new ImmutableRect2i(mutable));
+            } else {
+                heightDifference = 0;
+            }
+        }
+
+        if (boxWidget != null) {
+            ScrollBoxRecipeWidgetAccessor theirWidget = (ScrollBoxRecipeWidgetAccessor) boxWidget;
+            ScreenRectangle area = boxWidget.getArea();
+            int x = area.left();
+            int y = area.top();
+            int width = area.width();
+            int height = theirWidget.shareRecipe$getVisibleAmount() + theirWidget.shareRecipe$getHiddenAmount();
+            IDrawable contents = theirWidget.shareRecipe$getContents();
+            ScrollBoxRecipeWidget scrollGridRecipeWidget = new ScrollBoxRecipeWidget(width, height, x, y);
+            scrollGridRecipeWidget.setContents(contents);
+            heightDifference = height - area.height();
+            if (heightDifference > 0) {
+                allWidgets.add(scrollIndex + 1, scrollGridRecipeWidget);
+                allWidgets.remove(scrollIndex);
                 Rect2i mutable = rect.toMutable();
                 mutable.setHeight(rect.getHeight() + heightDifference);
                 ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(new ImmutableRect2i(mutable));
@@ -270,8 +299,16 @@ public class ShareButtonController<T> implements IIconButtonController {
 
         if (scrollWidget != null) {
             if (heightDifference > 0) {
-                allWidgets.add(index + 1, scrollWidget);
-                allWidgets.remove(index);
+                allWidgets.add(scrollIndex + 1, scrollWidget);
+                allWidgets.remove(scrollIndex);
+                ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(rect);
+            }
+        }
+
+        if (boxWidget != null) {
+            if (heightDifference > 0) {
+                allWidgets.add(boxIndex + 1, boxWidget);
+                allWidgets.remove(scrollIndex);
                 ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(rect);
             }
         }
@@ -303,24 +340,23 @@ public class ShareButtonController<T> implements IIconButtonController {
             Background ourBackground = new Background(backgroundSha, backgroundRender.width(), backgroundRender.height(), backgroundRender.strings(), tooltips);
             String cat = recipeCategory.getTitle().getString();
             IRecipeSlotsView recipeSlotsView = recipeLayout.getRecipeSlotsView();
-            List<IRecipeSlotView> inputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.INPUT);
-            List<IRecipeSlotView> outputSlots = recipeSlotsView.getSlotViews(RecipeIngredientRole.OUTPUT);
+            List<IRecipeSlotView> recipeSlots = recipeSlotsView.getSlotViews();
 
             Minecraft minecraft = Minecraft.getInstance();
             Player player = minecraft.player;
             Item.TooltipContext tooltipContext = Item.TooltipContext.of(minecraft.level);
 
             int i = 0;
-            List<ShareSlot> inputs =  new ArrayList<>();
-            for (IRecipeSlotView inputSlot : inputSlots) {
-                if (inputSlot instanceof RecipeSlot recipeSlot) {
+            List<ShareSlot> shareSlots =  new ArrayList<>();
+            for (IRecipeSlotView recipeSlotView : recipeSlots) {
+                if (recipeSlotView instanceof RecipeSlot recipeSlot) {
                     Rect2i rect = recipeSlot.getRect();
                     if (slots != null && slots.slots.contains(recipeSlot)) {
                         rect.setX(rect.getX() + slots.offsetX());
                         rect.setY(rect.getY() + slots.offsetY());
                     }
 
-                    List<ITypedIngredient<?>> list = inputSlot.getAllIngredients().toList();
+                    List<ITypedIngredient<?>> list = recipeSlotView.getAllIngredients().toList();
                     List<ShareIngredient> shareIngredient = new ArrayList<>();
                     for (ITypedIngredient<?> iTypedIngredient : list) {
                         JeiTooltip jeiTooltip = new JeiTooltip();
@@ -357,59 +393,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                             shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, iTypedIngredient.getType().getUid(), tooltip));
                         }
                     }
-                    inputs.add(new ShareSlot(i, rect, shareIngredient));
-                }
-                i++;
-            }
-
-            int outputSlotNum = 0;
-            List<ShareSlot> outputs = new ArrayList<>();
-            for (IRecipeSlotView outputSlot : outputSlots) {
-                if (outputSlot instanceof RecipeSlot recipeSlot) {
-                    Rect2i rect = recipeSlot.getRect();
-                    if (slots != null && slots.slots.contains(recipeSlot)) {
-                        rect.setX(rect.getX() + slots.offsetX());
-                        rect.setY(rect.getY() + slots.offsetY());
-                    }
-
-                    List<ITypedIngredient<?>> list = outputSlot.getAllIngredients().toList();
-                    List<ShareIngredient> shareIngredient = new ArrayList<>();
-                    for (ITypedIngredient<?> iTypedIngredient : list) {
-                        JeiTooltip jeiTooltip = new JeiTooltip();
-                        RecipeSlotAccessor recipeSlot1 = (RecipeSlotAccessor) recipeSlot;
-                        recipeSlot1.shareRecipe$getTooltip(jeiTooltip, iTypedIngredient);
-                        Optional<Component> modNameForTooltip = ShareJeiPlugin.getInstance().helper.getModIdHelper().getModNameForTooltip(iTypedIngredient);
-                        List<Either<FormattedText, TooltipComponent>> lines = jeiTooltip.getLines();
-                        List<NerfedGuiGraphics.CapturedString> itemTooltips = new ArrayList<>(lines
-                                .stream()
-                                .filter(l -> l.left().isPresent())
-                                .map(l -> {
-                                    if (l.left().isPresent()) {
-                                        return l.left().get();
-                                    }
-                                    return null;
-                                })
-                                .filter(Objects::nonNull)
-                                .map(NerfedGuiGraphics::getCapturedStrings)
-                                .flatMap(Collection::stream)
-                                .toList());
-                        if (modNameForTooltip.isPresent()) {
-                            List<NerfedGuiGraphics.CapturedString> capturedStrings = NerfedGuiGraphics.getCapturedStrings(modNameForTooltip.get());
-                            itemTooltips.addAll(capturedStrings);
-                        }
-                        Tooltip tooltip = new Tooltip(rect, itemTooltips);
-                        if (iTypedIngredient.getType() == VanillaTypes.ITEM_STACK) {
-                            Optional<ItemStack> itemStack = iTypedIngredient.getItemStack();
-                            if (itemStack.isPresent()) {
-                                ItemStack stack = itemStack.get();
-                                ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), "itemstack", tooltip));
-                            }
-                        } else {
-                            shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, iTypedIngredient.getType().getUid(), tooltip));
-                        }
-                    }
-                    outputs.add(new ShareSlot(i, rect, shareIngredient));
+                    shareSlots.add(new ShareSlot(i, rect, shareIngredient));
                 }
                 i++;
             }
@@ -420,7 +404,7 @@ public class ShareButtonController<T> implements IIconButtonController {
             } else if (!info.curseID.isEmpty()) {
                 modpack = new RecipeData.Modpack(info.curseID, "Curseforge");
             }
-            RecipeData recipeData = new RecipeData(cat, inputs, outputs, ourBackground, modpack);
+            RecipeData recipeData = new RecipeData(cat, shareSlots, ourBackground, modpack);
 
             CompletableFuture.runAsync(() -> {
                 try {
@@ -459,8 +443,6 @@ public class ShareButtonController<T> implements IIconButtonController {
                         InputStream inputStream = urlConnection.getErrorStream();
                         String body = IOUtils.toString(inputStream, StandardCharsets.UTF_8);
                         if (Minecraft.getInstance().player != null) {
-                            System.out.println(urlConnection.getResponseCode());
-                            System.out.println(body);
                             Component finished = Component.literal("[ShareRecipe] An error occurred uploading your content to ShareRecipe.");
                             Minecraft.getInstance().execute(() -> Minecraft.getInstance().player.sendSystemMessage(finished));
                         }
@@ -489,7 +471,6 @@ public class ShareButtonController<T> implements IIconButtonController {
                 urlConnection.setDoOutput(true);
                 urlConnection.setRequestMethod("PUT");
                 urlConnection.getOutputStream().write(image);
-                System.out.println(urlConnection.getResponseCode());
                 if (urlConnection.getResponseCode() == 204) {
                     return true;
                 }
@@ -498,7 +479,6 @@ public class ShareButtonController<T> implements IIconButtonController {
                 return true;
             }
         } catch (Exception e) {
-            System.out.println(e.getMessage());
             e.printStackTrace();
         }
         return false;
