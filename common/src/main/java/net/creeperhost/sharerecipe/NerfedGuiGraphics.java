@@ -5,9 +5,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.network.chat.ComponentUtils;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.Style;
 import net.minecraft.util.FormattedCharSequence;
+import net.minecraft.util.StringDecomposer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
@@ -48,8 +50,22 @@ public class NerfedGuiGraphics extends GuiGraphics {
         this.pose().last().pose().getScale(scaleVector);
         float width = font.width(string) * scaleVector.y();
         this.pose().last().pose().getTranslation(translation);
-        List<StringWithStyle> pairs = List.of(new StringWithStyle(string, Style.EMPTY));
-        capturedStrings.add(new CapturedString(pairs, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl));
+        StringBuilder builder = new StringBuilder();
+        AtomicReference<Style> lastStyle = new AtomicReference<>(Style.EMPTY);
+        List<StringWithStyle> stringStyles = new ArrayList<>();
+        StringDecomposer.iterateFormatted(string != null ? string : "", Style.EMPTY, ((i1, style, j1) -> {
+            char blah = (char) j1;
+            if (!lastStyle.get().equals(style)) {
+                if (style == null) style = Style.EMPTY;
+                if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+                builder.delete(0, builder.length());
+                lastStyle.set(style);
+            }
+            builder.append(blah);
+            return true;
+        }));
+        if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+        capturedStrings.add(new CapturedString(stringStyles, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl));
         return 0;
     }
 
@@ -102,7 +118,7 @@ public class NerfedGuiGraphics extends GuiGraphics {
         List<FormattedCharSequence> split = font.split(formattedText, Integer.MAX_VALUE);
         List<CapturedString> capturedStrings = new ArrayList<>();
         for (FormattedCharSequence formattedCharSequence : split) {
-            capturedStrings.add(getCapturedString(font, formattedCharSequence, 0, 0, 0, 0xFFFFFFFF, false, 0, 0));
+            capturedStrings.add(getCapturedString(font, formattedCharSequence, 0, 0, 0, 0xFFFFFFFF, true, 0, 0));
         }
         return capturedStrings;
     }
