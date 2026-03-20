@@ -144,7 +144,7 @@ public class ShareButtonController<T> implements IIconButtonController {
         int scrollIndex = 0;
         int boxIndex = 0;
         for (int index = 0; index < allWidgets.size(); index++) {
-            IRecipeWidget widget = allWidgets.get(scrollIndex);
+            IRecipeWidget widget = allWidgets.get(index);
             if (widget instanceof ScrollGridRecipeWidget) {
                 scrollWidget = (ScrollGridRecipeWidget) widget;
                 scrollIndex = index;
