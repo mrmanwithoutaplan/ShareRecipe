@@ -25,6 +25,6 @@ public class ShareJeiPlugin implements IModPlugin {
     public void registerAdvanced(IAdvancedRegistration registration) {
         INSTANCE = this;
         helper = registration.getJeiHelpers();
-        registration.addRecipeButtonFactory(new JeiShareButtonFactory());
+        registration.addRecipeButtonFactory(new JeiShareButtonFactory(registration.getJeiHelpers().getGuiHelper()));
     }
 }

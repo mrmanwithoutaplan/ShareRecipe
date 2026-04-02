@@ -18,10 +18,12 @@ import mezz.jei.api.gui.ingredient.IRecipeSlotView;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
 import mezz.jei.api.gui.inputs.IJeiUserInput;
 import mezz.jei.api.gui.widgets.IRecipeWidget;
+import mezz.jei.api.helpers.IGuiHelper;
 import mezz.jei.api.ingredients.ITypedIngredient;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.common.gui.JeiTooltip;
 import mezz.jei.common.util.ImmutableRect2i;
+import mezz.jei.library.gui.elements.DrawableBuilder;
 import mezz.jei.library.gui.ingredients.RecipeSlot;
 import mezz.jei.library.gui.widgets.ScrollBoxRecipeWidget;
 import mezz.jei.library.gui.widgets.ScrollGridRecipeWidget;
@@ -61,9 +63,11 @@ import java.util.concurrent.CompletableFuture;
 public class ShareButtonController<T> implements IIconButtonController {
     private final IRecipeLayoutDrawable<T> layoutDrawable;
     private static final String SHARE_RECIPE_API = "http://localhost:5000/";
+    private final IGuiHelper guiHelper;
 
-    public ShareButtonController(IRecipeLayoutDrawable<T> layoutDrawable) {
+    public ShareButtonController(IRecipeLayoutDrawable<T> layoutDrawable, IGuiHelper guiHelper) {
         this.layoutDrawable = layoutDrawable;
+        this.guiHelper = guiHelper;
     }
 
     public byte[] actualRenderCall(RenderTarget framebuffer, int bufferWidth, int bufferHeight, float scale, Rect2i rect, GuiGraphics guiGraphics) {
@@ -486,12 +490,16 @@ public class ShareButtonController<T> implements IIconButtonController {
 
     @Override
     public void getTooltips(ITooltipBuilder tooltip) {
+        tooltip.add(Component.translatable("sharerecipe.tooltip"));
         IIconButtonController.super.getTooltips(tooltip);
     }
 
     @Override
     public void initState(IButtonState state) {
         IIconButtonController.super.initState(state);
+        IDrawable drawable = guiHelper.drawableBuilder(ResourceLocation.fromNamespaceAndPath(ShareRecipe.MOD_ID, "textures/gui/share_button.png"), 18, 18, 9, 9)
+                .setTextureSize(9, 9).build();
+        state.setIcon(drawable);
     }
 
     @Override
