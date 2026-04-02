@@ -387,10 +387,10 @@ public class ShareButtonController<T> implements IIconButtonController {
                             if (itemStack.isPresent()) {
                                 ItemStack stack = itemStack.get();
                                 ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
-                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), stack.isBarVisible(), stack.getBarColor(), stack.getBarWidth(), tooltip, "itemstack"));
+                                shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), stack.isEnchanted(), stack.isBarVisible(), stack.getBarColor(), stack.getBarWidth(), tooltip, "itemstack"));
                             }
                         } else {
-                            shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, false, 0, 0, tooltip, iTypedIngredient.getType().getUid()));
+                            shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, false, false, 0, 0, tooltip, iTypedIngredient.getType().getUid()));
                         }
                     }
                     shareSlots.add(new ShareSlot(i, rect, shareIngredient));

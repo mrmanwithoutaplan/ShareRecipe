@@ -57,14 +57,14 @@ public class NerfedGuiGraphics extends GuiGraphics {
             char blah = (char) j1;
             if (!lastStyle.get().equals(style)) {
                 if (style == null) style = Style.EMPTY;
-                if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+                if (!builder.toString().startsWith("Not yet eaten!") && !builder.isEmpty())  stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
                 builder.delete(0, builder.length());
                 lastStyle.set(style);
             }
             builder.append(blah);
             return true;
         }));
-        if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+        if (!builder.toString().startsWith("Not yet eaten!") && !builder.isEmpty())  stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
         capturedStrings.add(new CapturedString(stringStyles, (int) ((i * scale) + translation.x()), (int) ((j * scale) + translation.y()), width, k, bl));
         return 0;
     }
@@ -101,14 +101,14 @@ public class NerfedGuiGraphics extends GuiGraphics {
             char blah = (char) j1;
             if (!lastStyle.get().equals(style)) {
                 if (style == null) style = Style.EMPTY;
-                if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+                if (!builder.toString().startsWith("Not yet eaten!") && !builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
                 builder.delete(0, builder.length());
                 lastStyle.set(style);
             }
             builder.append(blah);
             return true;
         });
-        if (!builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
+        if (!builder.toString().startsWith("Not yet eaten!") && !builder.isEmpty()) stringStyles.add(new StringWithStyle(builder.toString(), lastStyle.get()));
         if (width == 0) width = font.width(formattedCharSequence);
         return new CapturedString(stringStyles, translationX + i , translationY + j, width, k, bl);
     }
