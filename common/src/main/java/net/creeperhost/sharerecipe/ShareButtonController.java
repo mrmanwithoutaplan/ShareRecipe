@@ -306,6 +306,7 @@ public class ShareButtonController<T> implements IIconButtonController {
                 allWidgets.add(scrollIndex + 1, scrollWidget);
                 allWidgets.remove(scrollIndex);
                 ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(rect);
+                this.layoutDrawable.drawRecipe(guiGraphics, 0, 0); // reset button position
             }
         }
 
@@ -314,8 +315,11 @@ public class ShareButtonController<T> implements IIconButtonController {
                 allWidgets.add(boxIndex + 1, boxWidget);
                 allWidgets.remove(scrollIndex);
                 ((RecipeLayoutAccessor)drawable).sharerecipe$setArea(rect);
+                this.layoutDrawable.drawRecipe(guiGraphics, 0, 0); // reset button position
             }
         }
+
+        this.actualRenderCall(framebuffer, bufferWidth, bufferHeight, scale, rect.toMutable(), guiGraphics);
 
         return backgroundRender;
     }
