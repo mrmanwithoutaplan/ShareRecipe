@@ -1,12 +1,20 @@
 package net.creeperhost.sharerecipe;
 
 import com.google.gson.Gson;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.google.gson.reflect.TypeToken;
+import com.google.gson.stream.JsonReader;
 import com.mojang.blaze3d.pipeline.RenderTarget;
 import com.mojang.blaze3d.pipeline.TextureTarget;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.datafixers.util.Either;
 import com.mojang.datafixers.util.Pair;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.JsonOps;
+import com.mojang.serialization.MapCodec;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -31,28 +39,40 @@ import net.creeperhost.sharerecipe.mixin.RecipeLayoutAccessor;
 import net.creeperhost.sharerecipe.mixin.RecipeSlotAccessor;
 import net.creeperhost.sharerecipe.mixin.ScrollBoxRecipeWidgetAccessor;
 import net.creeperhost.sharerecipe.mixin.ScrollGridRecipeWidgetAccessor;
+import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.navigation.ScreenPosition;
 import net.minecraft.client.gui.navigation.ScreenRectangle;
 import net.minecraft.client.renderer.Rect2i;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.ReloadableServerResources;
+import net.minecraft.server.packs.resources.Resource;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.tooltip.TooltipComponent;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeManager;
+import net.minecraft.world.item.crafting.RecipeSerializer;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.tuple.Triple;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.lang.reflect.Type;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.net.URL;
@@ -324,13 +344,53 @@ public class ShareButtonController<T> implements IIconButtonController {
         return backgroundRender;
     }
 
+    private <R> ResourceLocation getRegistryName(IRecipeLayoutDrawable<R> layout) {
+        return layout.getRecipeCategory().getRegistryName(layout.getRecipe());
+    }
+
     @Override
     public boolean onPress(IJeiUserInput input) {
         if (input.isSimulate()) return true;
+        Gson gson = new Gson();
+        Type mapType = new TypeToken<TreeMap<String, Object>>() {}.getType();
         try {
 
             IRecipeLayoutDrawable<?> recipeLayout = this.layoutDrawable;
             IRecipeCategory<?> recipeCategory = recipeLayout.getRecipeCategory();
+            ResourceLocation registryName = getRegistryName(recipeLayout);
+            RecipeManager recipeManager = Minecraft.getInstance().getConnection().getRecipeManager();
+            Object recipe = recipeLayout.getRecipe();
+            if (recipe instanceof RecipeHolder<?> holder) {
+                Recipe<?> minecraftRecipe = holder.value();
+                MapCodec<?> recipeCodec = minecraftRecipe.getSerializer().codec();
+                RegistryAccess.Frozen frozen = Minecraft.getInstance().getConnection().registryAccess();
+                ResourceLocation id = holder.id();
+
+
+                RecipeSerializer<?> serializer = minecraftRecipe.getSerializer();
+
+                MapCodec<? extends Recipe<?>> mapCodec = serializer.codec();
+                if (mapCodec != null) {
+                    MapCodec rawMapCodec = (MapCodec) mapCodec;
+                    Recipe rawRecipe = (Recipe) minecraftRecipe;
+                    HolderLookup.Provider registryAccess = Minecraft.getInstance().getConnection().registryAccess();
+                    var registryOpsContext = registryAccess.createSerializationContext(JsonOps.INSTANCE);
+
+                    var res = rawMapCodec.codec()
+                            .encodeStart(registryOpsContext, rawRecipe);
+                    System.out.println(res);
+                }
+            }
+            Optional<Resource> resource = Minecraft.getInstance().getResourceManager().getResource(ResourceLocation.fromNamespaceAndPath(registryName.getNamespace(), "recipes/" + registryName.getPath() + ".json"));
+            String recipeId = "dunno";
+            if (resource.isPresent()) {
+                JsonReader jsonReader = new JsonReader(resource.get().openAsReader());
+                jsonReader.setLenient(true);
+                TreeMap<String, Object> sortedRecipe = gson.fromJson(jsonReader, mapType);
+                String sortedRecipeString = gson.toJson(sortedRecipe);
+                recipeId = DigestUtils.sha1Hex(sortedRecipeString);
+            }
+
             BackgroundRenderReturn backgroundRenderReturn = renderBackground();
 
             BackgroundRender backgroundRender = backgroundRenderReturn.render();
@@ -394,6 +454,13 @@ public class ShareButtonController<T> implements IIconButtonController {
                             Optional<ItemStack> itemStack = iTypedIngredient.getItemStack();
                             if (itemStack.isPresent()) {
                                 ItemStack stack = itemStack.get();
+                                DataResult<JsonElement> encode = ItemStack.CODEC.encode(stack, JsonOps.INSTANCE, JsonOps.INSTANCE.empty());
+                                String itemJason = encode.result().get().toString();
+                                TreeMap<String, Object> sortedMap = gson.fromJson(itemJason, mapType);
+                                TreeMap<String, Object> copy = new TreeMap<>(sortedMap);
+                                copy.remove("count");
+                                String hashSortedJson = gson.toJson(copy);
+                                String itemId = DigestUtils.sha1Hex(hashSortedJson);
                                 ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
                                 shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), stack.isEnchanted(), stack.isBarVisible(), stack.getBarColor(), stack.getBarWidth(), tooltip, "itemstack"));
                             }
@@ -426,8 +493,6 @@ public class ShareButtonController<T> implements IIconButtonController {
                         }
                         return;
                     }
-
-                    Gson gson = new Gson();
                     String json = gson.toJson(recipeData);
                     URL url = new URI(SHARE_RECIPE_API + "recipe").toURL();
                     HttpURLConnection urlConnection = (HttpURLConnection) url.openConnection();
