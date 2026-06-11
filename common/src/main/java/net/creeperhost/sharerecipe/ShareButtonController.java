@@ -14,6 +14,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.MapCodec;
+import io.netty.buffer.Unpooled;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -47,6 +48,7 @@ import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.FormattedText;
@@ -369,23 +371,43 @@ public class ShareButtonController<T> implements IIconButtonController {
                 recipeId = id.toString();
                 Recipe<?> minecraftRecipe = holder.value();
 
-                HolderLookup.Provider registryAccess = Minecraft.getInstance().getConnection().registryAccess();
-                RegistryOps<JsonElement> registryOpsContext = registryAccess.createSerializationContext(JsonOps.INSTANCE);
+                // Grab the Registry Access context required for 1.21 network buffers
+                RegistryAccess registryAccess = Minecraft.getInstance().getConnection().registryAccess();
+
+                // Create a network-friendly byte buffer mimicking the real server-to-client pipeline
+                RegistryFriendlyByteBuf buffer = new RegistryFriendlyByteBuf(
+                        Unpooled.buffer(),
+                        registryAccess
+                );
 
                 try {
-                    Recipe rawRecipe = minecraftRecipe;
+                    Recipe<?> rawRecipe = minecraftRecipe;
 
-                    DataResult<JsonElement> res = Recipe.CODEC.encodeStart(registryOpsContext, rawRecipe);
+                    // 1. Fetch the recipe's direct serializer
+                    RecipeSerializer<?> serializer = rawRecipe.getSerializer();
 
-                    if (res.isSuccess()) {
-                        TreeMap<String, Object> sortedMap = gson.fromJson(res.getOrThrow(), mapType);
+                    if (serializer != null) {
+                        // 2. Cast safely to extract its modern 1.21 StreamCodec
+                        StreamCodec<RegistryFriendlyByteBuf, Recipe<?>> streamCodec =
+                                (StreamCodec<RegistryFriendlyByteBuf, Recipe<?>>) serializer.streamCodec();
 
-                        String hashSortedJson = gson.toJson(sortedMap);
-                        recipeId = DigestUtils.sha1Hex(recipeCategory.getRecipeType().getUid() + hashSortedJson);
+                        // 3. Write the recipe data directly into the network stream packet
+                        streamCodec.encode(buffer, rawRecipe);
+
+                        // 4. Generate your unique hash from the encoded byte data going over the wire
+                        byte[] encodedBytes = new byte[buffer.readableBytes()];
+                        buffer.readBytes(encodedBytes);
+
+                        // Hash the serialized bytes alongside the category UID
+                        recipeId = DigestUtils.sha1Hex(recipeCategory.getRecipeType().getUid() + DigestUtils.sha1Hex(encodedBytes));
 
                     }
                 } catch (Throwable e) {
+                    System.err.println("Critical network recipe encoding failure for ID: " + recipeId);
                     e.printStackTrace();
+                } finally {
+                    // Always release the buffer memory to prevent memory leaks
+                    buffer.release();
                 }
             }
 
