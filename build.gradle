@@ -1,5 +1,5 @@
 plugins {
-    id 'dev.architectury.loom' version '1.11-SNAPSHOT' apply false
+    id 'dev.architectury.loom' version '1.9.428' apply false
     id 'architectury-plugin' version '3.4-SNAPSHOT'
     id 'com.gradleup.shadow' version '8.3.6' apply false
 }
@@ -38,12 +38,12 @@ subprojects {
     dependencies {
         minecraft "net.minecraft:minecraft:$rootProject.minecraft_version"
         mappings loom.officialMojangMappings()
-        modApi ("net.creeperhost:polylib-fabric:${polylib_version}")
+        modCompileOnly  ("net.creeperhost:polylib-fabric:${polylib_version}")
         modApi ("net.covers1624:Quack:${quack_version}") { transitive = false }
         // compile against the JEI API but do not include it at runtime
         modCompileOnlyApi("mezz.jei:jei-${minecraft_version}-fabric-api:${jei_version}")
         // at runtime, use the full JEI jar for Fabric
-        modImplementation("mezz.jei:jei-${minecraft_version}-fabric:${jei_version}")
+        modCompileOnly("mezz.jei:jei-${minecraft_version}-fabric:${jei_version}")
     }
 
     java {

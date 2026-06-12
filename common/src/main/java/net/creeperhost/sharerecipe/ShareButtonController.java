@@ -14,6 +14,7 @@ import com.mojang.serialization.Codec;
 import com.mojang.serialization.DataResult;
 import com.mojang.serialization.JsonOps;
 import com.mojang.serialization.MapCodec;
+import dev.architectury.fluid.FluidStack;
 import io.netty.buffer.Unpooled;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
@@ -477,10 +478,21 @@ public class ShareButtonController<T> implements IIconButtonController {
                                 TreeMap<String, Object> copy = new TreeMap<>(sortedMap);
                                 copy.remove("count");
                                 String hashSortedJson = gson.toJson(copy);
-                                String itemId = DigestUtils.sha1Hex(recipeCategory.getRecipeType().getUid() + hashSortedJson);
+                                String itemId = DigestUtils.sha1Hex(hashSortedJson);
                                 ResourceLocation rs = BuiltInRegistries.ITEM.getKey(stack.getItem());
                                 shareIngredient.add(new ShareIngredient(rs.toString(), stack.getCount(), stack.isEnchanted(), stack.isBarVisible(), stack.getBarColor(), stack.getBarWidth(), itemId, tooltip, "itemstack"));
                             }
+                        } else if (iTypedIngredient.getType().getUid().contains("fluid")) {
+                            FluidStack shareIngredientFluid = FluidHandler.handleFluid(iTypedIngredient);
+                            long amount = shareIngredientFluid.getAmount();
+                            DataResult<JsonElement> encode = FluidStack.CODEC.encode(shareIngredientFluid, serializationContext, JsonOps.INSTANCE.empty());
+                            String itemJason = encode.result().get().toString();
+                            TreeMap<String, Object> sortedMap = gson.fromJson(itemJason, mapType);
+                            TreeMap<String, Object> copy = new TreeMap<>(sortedMap);
+                            copy.remove("amount");
+                            String hashSortedJson = gson.toJson(copy);
+                            String fluidId = DigestUtils.sha1Hex(hashSortedJson);
+                            shareIngredient.add(new ShareIngredient(shareIngredientFluid.getFluid().arch$registryName().toString(), (int) amount, false, false, 0, 0, fluidId, tooltip, "fluid_stack"));
                         } else {
                             shareIngredient.add(new ShareIngredient("sharerecipe:unknown", 0, false, false, 0, 0, "unknown", tooltip, iTypedIngredient.getType().getUid()));
                         }
